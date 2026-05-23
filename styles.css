@@ -207,6 +207,12 @@ select {
   margin-bottom: 18px;
 }
 
+.method-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .summary-card,
 .detail-card {
   background: linear-gradient(180deg, #fffdf8 0%, #fbf5eb 100%);
@@ -221,8 +227,27 @@ select {
   margin-bottom: 10px;
 }
 
+.method-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.method-list li + li {
+  margin-top: 6px;
+}
+
 .table-wrap {
   overflow-x: auto;
+}
+
+.method-table-wrap {
+  margin-top: 18px;
+}
+
+.method-note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .workbook-panel {
@@ -316,7 +341,8 @@ th {
 @media (max-width: 760px) {
   .grid,
   .summary,
-  .detail-grid {
+  .detail-grid,
+  .method-grid {
     grid-template-columns: 1fr;
   }
 
