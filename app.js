@@ -736,6 +736,77 @@ function previewWorkbook() {
 }
 
 function buildWorkbook(row, assessment, entries, firstAid) {
+  if (window.CHEMICAL_RISK_TEMPLATE_BASE64) {
+    return buildWorkbookFromTemplate(row, assessment, entries, firstAid);
+  }
+  return buildWorkbookFallback(row, assessment, entries, firstAid);
+}
+
+function buildWorkbookFromTemplate(row, assessment, entries, firstAid) {
+  const wb = XLSX.read(window.CHEMICAL_RISK_TEMPLATE_BASE64, { type: "base64", cellStyles: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const ppe = normalizePpe(assessment.recommendedPpe);
+  const setCell = (cell, value, styleSource = cell) => setTemplateCell(ws, cell, value, styleSource);
+
+  setCell("C3", row.name);
+  setCell("F3", row.assessor);
+  setCell("C5", row.location);
+  setCell("F5", row.date);
+  setCell("C6", row.peopleCount);
+
+  const hazardRows = [
+    { rowNo: 9, areaStyle: "A9", hazardStyle: "B9", riskStyle: "C9", controlStyle: "D9", ratingStyle: "F9" },
+    { rowNo: 10, areaStyle: "A10", hazardStyle: "B11", riskStyle: "C10", controlStyle: "D10", ratingStyle: "F10" },
+    { rowNo: 11, areaStyle: "A11", hazardStyle: "B11", riskStyle: "C11", controlStyle: "D11", ratingStyle: "F11" },
+    { rowNo: 12, areaStyle: "A12", hazardStyle: "B12", riskStyle: "C12", controlStyle: "D12", ratingStyle: "F12" },
+    { rowNo: 13, areaStyle: "A13", hazardStyle: "B13", riskStyle: "C13", controlStyle: "D13", ratingStyle: "F13" },
+    { rowNo: 14, areaStyle: "A14", hazardStyle: "B14", riskStyle: "C14", controlStyle: "D14", ratingStyle: "F14" },
+  ];
+
+  hazardRows.forEach(({ rowNo, areaStyle, hazardStyle, riskStyle, controlStyle, ratingStyle }, index) => {
+    const entry = entries[index];
+    setCell(`A${rowNo}`, entry?.area || "", areaStyle);
+    setCell(`B${rowNo}`, entry?.hazard || "", hazardStyle);
+    setCell(`C${rowNo}`, entry?.risk || "", riskStyle);
+    setCell(`D${rowNo}`, entry?.controls || "", controlStyle);
+    setCell(`F${rowNo}`, entry?.rating || "", ratingStyle);
+  });
+
+  setCell("C19", summarizeFirefighting(assessment.hazardTags), "C19");
+  setCell("C27", summarizeSpillPrecautions(assessment.hazardTags, assessment.engineeringControls), "C27");
+  setCell("C28", summarizeSpillCleanup(assessment.hazardTags, assessment.wasteFlags), "C28");
+
+  setCell("C31", ppe[0] || "", "C31");
+  setCell("C32", ppe[1] || "", "C32");
+  setCell("C33", ppe[2] || "", "C33");
+
+  setCell("C34", firstAid.ingestion, "C34");
+  setCell("C35", firstAid.inhalation, "C35");
+  setCell("C36", firstAid.eyes, "C36");
+  setCell("C37", firstAid.skin, "C37");
+
+  setCell("C40", [
+    `CAS: ${row.cas || "-"}`,
+    `GHS: ${assessment.codes.join(", ") || "-"}`,
+    row.nameDetails ? `Name details: ${row.nameDetails}` : "",
+  ].filter(Boolean).join("\n"), "C40");
+  setCell("C44", row.assessor, "C44");
+  setCell("F44", row.supervisor, "F44");
+
+  return wb;
+}
+
+function setTemplateCell(ws, address, value, styleSource = address) {
+  const source = ws[styleSource] || {};
+  const cell = ws[address] || {};
+  cell.t = "s";
+  cell.v = value ?? "";
+  if (source.s !== undefined) cell.s = source.s;
+  if (source.z !== undefined) cell.z = source.z;
+  ws[address] = cell;
+}
+
+function buildWorkbookFallback(row, assessment, entries, firstAid) {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(Array.from({ length: 44 }, () => Array(6).fill("")));
   const setCell = (cell, value) => { ws[cell] = { t: "s", v: value ?? "" }; };
