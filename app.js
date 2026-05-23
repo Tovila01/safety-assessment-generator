@@ -74,8 +74,8 @@ const STANDARD_TEXT = {
 
 const AI_SETTINGS_STORAGE_KEY = "safety-assessment-generator-ai-settings";
 const DEFAULT_AI_SETTINGS = {
-  provider: "openai",
-  model: "gpt-4o-mini",
+  provider: "gemini",
+  model: "gemini-3.5-flash",
   apiKey: "",
   baseUrl: "",
   systemPrompt: [
