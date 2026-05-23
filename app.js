@@ -73,7 +73,7 @@ const STANDARD_TEXT = {
 };
 
 const AI_SETTINGS_STORAGE_KEY = "safety-assessment-generator-ai-settings";
-const AI_SETTINGS_VERSION = 2;
+const AI_SETTINGS_VERSION = 3;
 const DEFAULT_AI_SETTINGS = {
   version: AI_SETTINGS_VERSION,
   provider: "gemini",
@@ -580,9 +580,6 @@ function resetAiSettings() {
 
 function normalizeAiSettings(saved) {
   const incoming = saved && typeof saved === "object" ? saved : {};
-  if (incoming.version === AI_SETTINGS_VERSION) {
-    return { ...DEFAULT_AI_SETTINGS, ...incoming };
-  }
   const migrated = {
     ...DEFAULT_AI_SETTINGS,
     apiKey: typeof incoming.apiKey === "string" ? incoming.apiKey : DEFAULT_AI_SETTINGS.apiKey,
