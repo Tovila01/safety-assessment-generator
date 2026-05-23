@@ -104,7 +104,9 @@ const DEFAULT_AI_SETTINGS = {
     "10. Only include hazard statements / H-codes that are explicitly present in the text.",
     "11. Keep notes, storage, spill, first_aid, firefighting, disposal, and PPE concise and operational. Prefer compact summaries over long quoted passages.",
     "12. For the name field, return only the base chemical name. Exclude concentration, purity, grade, technical descriptors, percentages, bracketed qualifiers, catalogue numbers, product codes, and formulation details.",
+    "13. Put stripped descriptors such as grade, technical condition, particle form, or other qualifiers into `nameDetails` instead of the `name` field.",
     "Examples: return `Ethanol`, not `Ethanol 69%`; return `Acetone`, not `Acetone technical`; return `Hydrochloric acid`, not `Hydrochloric acid 37%`.",
+    "Example: for `Calcium chloride, fused, granular`, return `Calcium chloride` as `name` and `fused, granular` as `nameDetails`.",
     "",
     "Return valid JSON only.",
   ].join("\n"),
@@ -112,6 +114,7 @@ const DEFAULT_AI_SETTINGS = {
 const localAiConfig = (typeof window !== "undefined" && window.SAFETY_ASSESSMENT_LOCAL_CONFIG && typeof window.SAFETY_ASSESSMENT_LOCAL_CONFIG === "object")
   ? window.SAFETY_ASSESSMENT_LOCAL_CONFIG
   : {};
+let extractedNameDetails = "";
 
 const form = {
   pdfFile: document.querySelector("#pdfFile"),
@@ -233,6 +236,7 @@ async function extractWithAiFromPdfText(sourceText, fallbackExtraction) {
     "Return strict JSON with this schema only:",
     "{",
     '  "name": string,',
+    '  "nameDetails": string,',
     '  "cas": string,',
     '  "ghsCodes": string,',
     '  "physicalForm": string,',
@@ -390,8 +394,10 @@ function parseAiJson(value) {
 
 function sanitizeAiReview(reviewed, fallback) {
   const safe = reviewed && typeof reviewed === "object" ? reviewed : {};
+  const fallbackNameMeta = splitChemicalNameDetails(fallback.name || "");
   const extraction = {
-    name: canonicalizeChemicalName(safe.name || fallback.name || ""),
+    name: canonicalizeChemicalName(safe.name || fallbackNameMeta.baseName || fallback.name || ""),
+    nameDetails: normalizeFlatString(safe.nameDetails ?? fallback.nameDetails ?? fallbackNameMeta.details),
     cas: normalizeFlatString(safe.cas ?? fallback.cas),
     ghsCodes: normalizeAiCodes(safe.ghsCodes ?? fallback.ghsCodes),
     physicalForm: normalizeFlatString(safe.physicalForm ?? fallback.physicalForm),
@@ -431,13 +437,16 @@ function buildAiReviewStatus(reviewed) {
 function parseSdsText(text) {
   const productDescription = text.match(/Product Description\s*:?\s*([^\n]+?)(?=\s{2,}|Synonyms|Cat No|CAS No|Index No)/i)?.[1];
   const synonym = text.match(/Synonyms\s+([^\n]+?)(?=\s{2,}|Index No|CAS No|EC No)/i)?.[1];
+  const rawName = String(productDescription || synonym || "").trim();
+  const nameMeta = splitChemicalNameDetails(rawName);
   const cas = text.match(/CAS No\.?\s*([0-9-]+)/i)?.[1] || "";
   const weight = text.match(/Weight\s*%\s*([^\n]+?)(?=\s{2,}|Flam\.|Eye Irrit|STOT|$)/i)?.[1] || "";
   const hCodes = Array.from(new Set((text.match(/\b(?:EUH\d+|H\d{3})\b/g) || []).map((code) => code.toUpperCase())));
   const physicalForm = /physical state\s+liquid/i.test(text) ? "Liquid" : (/physical state\s+solid/i.test(text) ? "Solid" : "");
   const notes = summarizeHazardsFromCodes(hCodes);
   return {
-    name: canonicalizeChemicalName(productDescription || synonym || ""),
+    name: canonicalizeChemicalName(nameMeta.baseName || rawName),
+    nameDetails: nameMeta.details,
     cas,
     ghsCodes: hCodes.join(";"),
     concentration: weight.replace(/\s+/g, " ").trim(),
@@ -447,8 +456,10 @@ function parseSdsText(text) {
 }
 
 function applyExtracted(extracted) {
+  extractedNameDetails = normalizeFlatString(extracted.nameDetails || "");
   for (const [key, value] of Object.entries(extracted)) {
     if (key === "ghsCodes") form.ghsCodes.value = value || form.ghsCodes.value;
+    else if (key === "nameDetails") continue;
     else if (key === "physicalForm") form.physicalForm.value = value || form.physicalForm.value;
     else if (key === "concentration") form.concentration.value = value || form.concentration.value;
     else if (key === "notes") form.notes.value = value || form.notes.value;
@@ -504,6 +515,7 @@ function getFormData() {
     peopleCount: form.peopleCount.value.trim(),
     supervisor: form.supervisor.value.trim(),
     notes: form.notes.value.trim(),
+    nameDetails: extractedNameDetails,
     manualRiskEnabled: form.manualRiskEnabled.checked,
     manualHazardScore: Number(form.manualHazardScore.value),
     manualSeverity: form.manualSeverity.value.trim(),
@@ -643,7 +655,11 @@ function buildWorkbook(row, assessment, entries, firstAid) {
   setCell("C37", firstAid.skin);
 
   setCell("A40", "Other Information");
-  setCell("C40", [`CAS: ${row.cas || "-"}`, `GHS: ${assessment.codes.join(", ") || "-"}`].join("\n"));
+  setCell("C40", [
+    `CAS: ${row.cas || "-"}`,
+    `GHS: ${assessment.codes.join(", ") || "-"}`,
+    row.nameDetails ? `Name details: ${row.nameDetails}` : "",
+  ].filter(Boolean).join("\n"));
   setCell("A44", "Assessor's signature");
   setCell("C44", row.assessor);
   setCell("E44", "Supervisor's signature (if assessor is a student)");
@@ -686,12 +702,24 @@ function normalizeCodes(raw) {
 
 function canonicalizeChemicalName(value) {
   let text = String(value || "").trim();
+  text = splitChemicalNameDetails(text).baseName || text;
   text = text.replace(/\([^)]*\)/g, "");
   text = text.replace(/\[[^\]]*\]/g, "");
   text = text.replace(/,?\s+\b(technical|laboratory|lab|solution|mixture|reagent|absolute|anhydrous)\b.*$/i, "");
   text = text.replace(/\s+\d+(?:[.,]\d+)?\s*%.*$/i, "");
   text = text.replace(/\s+\b\d+(?:[.,]\d+)?\s*(?:wt%|w\/w|v\/v|vol%|purity)\b.*$/i, "");
   return text.replace(/\s{2,}/g, " ").trim().replace(/[ ,;-]+$/, "");
+}
+
+function splitChemicalNameDetails(value) {
+  const raw = String(value || "").trim();
+  if (!raw.includes(",")) return { baseName: raw, details: "" };
+  const parts = raw.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return { baseName: raw, details: "" };
+  return {
+    baseName: parts[0],
+    details: parts.slice(1).join(", "),
+  };
 }
 
 function summarizeHazardsFromCodes(codes) {
