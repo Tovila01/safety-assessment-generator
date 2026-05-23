@@ -153,15 +153,22 @@ const ui = {
   workbookPreviewMeta: document.querySelector("#workbookPreviewMeta"),
 };
 
-document.querySelector("#extractPdfButton").addEventListener("click", extractFromPdf);
-document.querySelector("#buildButton").addEventListener("click", renderAssessment);
-document.querySelector("#previewWorkbookButton").addEventListener("click", previewWorkbook);
-document.querySelector("#downloadButton").addEventListener("click", downloadWorkbook);
+document.querySelector("#extractPdfButton").addEventListener("click", () => runSafely(extractFromPdf));
+document.querySelector("#buildButton").addEventListener("click", () => runSafely(buildAssessment));
+document.querySelector("#previewWorkbookButton").addEventListener("click", () => runSafely(previewWorkbook));
+document.querySelector("#downloadButton").addEventListener("click", () => runSafely(downloadWorkbook));
 aiSettingsForm.saveButton.addEventListener("click", saveAiSettings);
 aiSettingsForm.resetButton.addEventListener("click", resetAiSettings);
 
 form.date.value = new Date().toLocaleDateString("en-GB").replace(/\//g, "/");
 initializeApp();
+window.addEventListener("error", (event) => {
+  if (event?.message) setStatus(`Error: ${event.message}`);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  const message = event?.reason?.message || String(event?.reason || "Unknown async error");
+  setStatus(`Error: ${message}`);
+});
 
 async function extractFromPdf() {
   const file = form.pdfFile.files?.[0];
@@ -182,7 +189,7 @@ async function extractFromPdf() {
   }
   const extracted = parseSdsText(text);
   applyExtracted(extracted);
-  renderAssessment();
+  buildAssessment();
   setStatus("PDF extraction complete.");
 }
 
@@ -242,6 +249,12 @@ function renderAssessment() {
   const firstAid = summarizeFirstAid(assessment.hazardTags);
   ui.firstAidList.innerHTML = Object.values(firstAid).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   setStatus("Assessment updated.");
+}
+
+function buildAssessment() {
+  renderAssessment();
+  previewWorkbook();
+  setStatus("Assessment built and workbook preview updated.");
 }
 
 function getFormData() {
@@ -542,6 +555,14 @@ function escapeHtml(value) {
 
 function setStatus(message) {
   ui.status.textContent = message;
+}
+
+async function runSafely(action) {
+  try {
+    await action();
+  } catch (error) {
+    setStatus(`Error: ${error?.message || String(error)}`);
+  }
 }
 
 function initializeApp() {
