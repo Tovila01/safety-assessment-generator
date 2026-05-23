@@ -408,9 +408,10 @@ function parseAiJson(value) {
 function sanitizeAiReview(reviewed, fallback) {
   const safe = reviewed && typeof reviewed === "object" ? reviewed : {};
   const fallbackNameMeta = splitChemicalNameDetails(fallback.name || "");
+  const normalizedName = canonicalizeChemicalName(safe.name || fallbackNameMeta.baseName || fallback.name || "");
   const extraction = {
-    name: canonicalizeChemicalName(safe.name || fallbackNameMeta.baseName || fallback.name || ""),
-    nameDetails: normalizeFlatString(safe.nameDetails ?? fallback.nameDetails ?? fallbackNameMeta.details),
+    name: normalizedName,
+    nameDetails: normalizeNameDetails(safe.nameDetails ?? fallback.nameDetails ?? fallbackNameMeta.details, normalizedName),
     cas: normalizeFlatString(safe.cas ?? fallback.cas),
     ghsCodes: normalizeAiCodes(safe.ghsCodes ?? fallback.ghsCodes),
     physicalForm: normalizeFlatString(safe.physicalForm ?? fallback.physicalForm),
@@ -429,6 +430,21 @@ function sanitizeAiReview(reviewed, fallback) {
 
 function normalizeFlatString(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeNameDetails(value, baseName = "") {
+  let text = normalizeFlatString(value);
+  const normalizedBase = canonicalizeChemicalName(baseName);
+  if (!text) return "";
+  text = text.replace(/^name details\s*:\s*/i, "");
+  if (normalizedBase) {
+    text = text.replace(new RegExp(`^${escapeRegExp(normalizedBase)}\\s*[,;:-]?\\s*`, "i"), "");
+  }
+  return text.replace(/^[,;:-]+\s*/, "").trim();
 }
 
 function normalizeAiCodes(value) {
@@ -540,7 +556,7 @@ function applyReviewSuggestions() {
   }
   for (const suggestion of latestAssessmentReview.suggestions) {
     if (suggestion.field === "nameDetails") {
-      extractedNameDetails = suggestion.value;
+      extractedNameDetails = normalizeNameDetails(suggestion.value, form.name.value);
       continue;
     }
     if (form[suggestion.field]) {
@@ -574,7 +590,7 @@ function parseSdsText(text) {
 }
 
 function applyExtracted(extracted) {
-  extractedNameDetails = normalizeFlatString(extracted.nameDetails || "");
+  extractedNameDetails = normalizeNameDetails(extracted.nameDetails || "", extracted.name || form.name.value);
   for (const [key, value] of Object.entries(extracted)) {
     if (key === "ghsCodes") form.ghsCodes.value = value || form.ghsCodes.value;
     else if (key === "nameDetails") continue;
@@ -621,8 +637,9 @@ function buildAssessment() {
 }
 
 function getFormData() {
+  const normalizedName = canonicalizeChemicalName(form.name.value);
   return {
-    name: canonicalizeChemicalName(form.name.value),
+    name: normalizedName,
     cas: form.cas.value.trim(),
     ghsCodes: form.ghsCodes.value.trim(),
     physicalForm: form.physicalForm.value.trim(),
@@ -633,7 +650,7 @@ function getFormData() {
     peopleCount: form.peopleCount.value.trim(),
     supervisor: form.supervisor.value.trim(),
     notes: form.notes.value.trim(),
-    nameDetails: extractedNameDetails,
+    nameDetails: normalizeNameDetails(extractedNameDetails, normalizedName),
     manualRiskEnabled: form.manualRiskEnabled.checked,
     manualHazardScore: Number(form.manualHazardScore.value),
     manualSeverity: form.manualSeverity.value.trim(),
