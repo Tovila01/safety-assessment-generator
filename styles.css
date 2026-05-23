@@ -101,6 +101,11 @@ h1 {
   margin-bottom: 14px;
 }
 
+.settings-toolbar {
+  margin-top: 14px;
+  margin-bottom: 0;
+}
+
 .file-input {
   display: inline-flex;
   flex-direction: column;
@@ -110,6 +115,7 @@ h1 {
 
 .button,
 input,
+select,
 textarea {
   border-radius: 14px;
 }
@@ -163,6 +169,7 @@ label span {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -170,6 +177,10 @@ textarea {
   padding: 12px 14px;
   font: inherit;
   color: var(--ink);
+}
+
+select {
+  appearance: none;
 }
 
 .full-width {

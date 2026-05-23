@@ -21,6 +21,49 @@
 
       <section class="panel">
         <div class="panel-header">
+          <h2>AI Settings</h2>
+          <p>Adjust provider, model, API key, and prompt behavior.</p>
+        </div>
+
+        <div class="grid">
+          <label>
+            <span>AI provider</span>
+            <select id="aiProvider">
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="groq">Groq</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="custom">Custom OpenAI-compatible</option>
+            </select>
+          </label>
+          <label>
+            <span>Model</span>
+            <input id="aiModel" type="text" placeholder="gpt-4o-mini" />
+          </label>
+          <label>
+            <span>API key</span>
+            <input id="aiApiKey" type="password" placeholder="Stored locally in this browser" />
+          </label>
+          <label>
+            <span>Base URL</span>
+            <input id="aiBaseUrl" type="text" placeholder="Optional custom endpoint" />
+          </label>
+        </div>
+
+        <label class="full-width">
+          <span>System prompt</span>
+          <textarea id="aiSystemPrompt" rows="6"></textarea>
+        </label>
+
+        <div class="toolbar settings-toolbar">
+          <button id="saveAiSettingsButton" class="button" type="button">Save AI Settings</button>
+          <button id="resetAiSettingsButton" class="button" type="button">Reset AI Settings</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
           <h2>Input</h2>
           <p>Upload a PDF or fill the fields manually.</p>
         </div>

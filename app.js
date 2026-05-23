@@ -72,6 +72,21 @@ const STANDARD_TEXT = {
   },
 };
 
+const AI_SETTINGS_STORAGE_KEY = "safety-assessment-generator-ai-settings";
+const DEFAULT_AI_SETTINGS = {
+  provider: "openai",
+  model: "gpt-4o-mini",
+  apiKey: "",
+  baseUrl: "",
+  systemPrompt: [
+    "You extract structured chemical safety information from SDS or fact-sheet text.",
+    "Be reproducible, conservative, and compact.",
+    "Return only the baseline safety facts needed for a standardized assessment.",
+    "Use only the source document, do not invent hazard codes or chemical names.",
+    "For the name field, use only the base chemical name without concentration, grade, or technical qualifiers.",
+  ].join("\n"),
+};
+
 const form = {
   pdfFile: document.querySelector("#pdfFile"),
   name: document.querySelector("#name"),
@@ -86,6 +101,16 @@ const form = {
   peopleCount: document.querySelector("#peopleCount"),
   supervisor: document.querySelector("#supervisor"),
   notes: document.querySelector("#notes"),
+};
+
+const aiSettingsForm = {
+  provider: document.querySelector("#aiProvider"),
+  model: document.querySelector("#aiModel"),
+  apiKey: document.querySelector("#aiApiKey"),
+  baseUrl: document.querySelector("#aiBaseUrl"),
+  systemPrompt: document.querySelector("#aiSystemPrompt"),
+  saveButton: document.querySelector("#saveAiSettingsButton"),
+  resetButton: document.querySelector("#resetAiSettingsButton"),
 };
 
 const ui = {
@@ -103,8 +128,11 @@ const ui = {
 document.querySelector("#extractPdfButton").addEventListener("click", extractFromPdf);
 document.querySelector("#buildButton").addEventListener("click", renderAssessment);
 document.querySelector("#downloadButton").addEventListener("click", downloadWorkbook);
+aiSettingsForm.saveButton.addEventListener("click", saveAiSettings);
+aiSettingsForm.resetButton.addEventListener("click", resetAiSettings);
 
 form.date.value = new Date().toLocaleDateString("en-GB").replace(/\//g, "/");
+loadAiSettings();
 renderAssessment();
 
 async function extractFromPdf() {
@@ -418,4 +446,40 @@ function escapeHtml(value) {
 
 function setStatus(message) {
   ui.status.textContent = message;
+}
+
+function loadAiSettings() {
+  let settings = { ...DEFAULT_AI_SETTINGS };
+  try {
+    const saved = localStorage.getItem(AI_SETTINGS_STORAGE_KEY);
+    if (saved) settings = { ...settings, ...JSON.parse(saved) };
+  } catch (_error) {
+    settings = { ...DEFAULT_AI_SETTINGS };
+  }
+  aiSettingsForm.provider.value = settings.provider;
+  aiSettingsForm.model.value = settings.model;
+  aiSettingsForm.apiKey.value = settings.apiKey;
+  aiSettingsForm.baseUrl.value = settings.baseUrl;
+  aiSettingsForm.systemPrompt.value = settings.systemPrompt;
+}
+
+function readAiSettings() {
+  return {
+    provider: aiSettingsForm.provider.value.trim(),
+    model: aiSettingsForm.model.value.trim(),
+    apiKey: aiSettingsForm.apiKey.value,
+    baseUrl: aiSettingsForm.baseUrl.value.trim(),
+    systemPrompt: aiSettingsForm.systemPrompt.value.trim(),
+  };
+}
+
+function saveAiSettings() {
+  localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(readAiSettings()));
+  setStatus("AI settings saved locally in this browser.");
+}
+
+function resetAiSettings() {
+  localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(DEFAULT_AI_SETTINGS));
+  loadAiSettings();
+  setStatus("AI settings reset to defaults.");
 }

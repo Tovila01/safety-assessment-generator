@@ -9,6 +9,7 @@ This repository is a standalone HTML/JavaScript version of the chemical risk ass
 ## Features
 
 - manual chemical risk assessment form
+- AI settings panel for provider, model, API key, base URL, and system prompt
 - SDS PDF upload with client-side text extraction
 - deterministic H-code based risk rating
 - standardized hazard wording across chemicals
@@ -20,8 +21,9 @@ This repository is a standalone HTML/JavaScript version of the chemical risk ass
 1. Open `index.html` in a browser.
 2. Optionally upload an SDS PDF and click `Extract from PDF`.
 3. Review and edit the fields.
-4. Click `Build Assessment` to preview the standardized result.
-5. Click `Download XLSX` to save the workbook.
+4. Adjust AI settings if needed. They are stored locally in the browser.
+5. Click `Build Assessment` to preview the standardized result.
+6. Click `Download XLSX` to save the workbook.
 
 ## Notes
 
