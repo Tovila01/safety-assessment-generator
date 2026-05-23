@@ -221,6 +221,35 @@ select {
   padding: 16px;
 }
 
+.review-toolbar {
+  margin-bottom: 12px;
+}
+
+.review-panel {
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid rgba(138, 59, 18, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdf8 0%, #fbf5eb 100%);
+}
+
+.review-panel.empty {
+  color: var(--muted);
+}
+
+.review-suggestion-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.review-suggestion-list li + li {
+  margin-top: 8px;
+}
+
+.review-reason {
+  color: var(--muted);
+}
+
 .summary-label {
   display: block;
   color: var(--muted);

@@ -115,6 +115,15 @@ const localAiConfig = (typeof window !== "undefined" && window.SAFETY_ASSESSMENT
   ? window.SAFETY_ASSESSMENT_LOCAL_CONFIG
   : {};
 let extractedNameDetails = "";
+let latestAssessmentReview = null;
+const ASSESSMENT_REVIEW_SYSTEM_PROMPT = [
+  "You review completed chemical safety assessments and suggest final corrections.",
+  "Your job is not to rewrite everything. Only suggest targeted last-mile fixes if something looks wrong, inconsistent, misspelled, incomplete, or unsupported.",
+  "Use the assessment data and hazard summary provided. Be conservative and concise.",
+  "Do not invent new hazard codes or unsupported facts.",
+  "If the assessment already looks acceptable, return no changes.",
+  "Return valid JSON only.",
+].join("\n");
 
 const form = {
   pdfFile: document.querySelector("#pdfFile"),
@@ -166,6 +175,8 @@ const ui = {
   workbookPreviewMeta: document.querySelector("#workbookPreviewMeta"),
   manualHazardDisplay: document.querySelector("#manualHazardDisplay"),
   manualRiskSummary: document.querySelector("#manualRiskSummary"),
+  reviewSuggestions: document.querySelector("#reviewSuggestions"),
+  applyReviewButton: document.querySelector("#applyReviewButton"),
 };
 
 let saveDirectoryHandle = null;
@@ -175,6 +186,8 @@ document.querySelector("#extractPdfButton").addEventListener("click", () => runS
 document.querySelector("#buildButton").addEventListener("click", () => runSafely(buildAssessment));
 document.querySelector("#previewWorkbookButton").addEventListener("click", () => runSafely(previewWorkbook));
 document.querySelector("#downloadButton").addEventListener("click", () => runSafely(downloadWorkbook));
+document.querySelector("#reviewAssessmentButton").addEventListener("click", () => runSafely(reviewAssessment));
+ui.applyReviewButton.addEventListener("click", () => runSafely(applyReviewSuggestions));
 aiSettingsForm.saveButton.addEventListener("click", saveAiSettings);
 aiSettingsForm.resetButton.addEventListener("click", resetAiSettings);
 form.manualRiskEnabled.addEventListener("change", renderAssessment);
@@ -264,23 +277,23 @@ async function extractWithAiFromPdfText(sourceText, fallbackExtraction) {
   }
 }
 
-async function callAiReview(settings, prompt) {
+async function callAiReview(settings, prompt, systemPromptOverride = "") {
   switch (settings.provider) {
     case "gemini":
-      return callGeminiReview(settings, prompt);
+      return callGeminiReview(settings, prompt, systemPromptOverride);
     case "anthropic":
-      return callAnthropicReview(settings, prompt);
+      return callAnthropicReview(settings, prompt, systemPromptOverride);
     case "openai":
     case "groq":
     case "openrouter":
     case "custom":
-      return callOpenAiCompatibleReview(settings, prompt);
+      return callOpenAiCompatibleReview(settings, prompt, systemPromptOverride);
     default:
       throw new Error(`Unsupported AI provider: ${settings.provider}`);
   }
 }
 
-async function callGeminiReview(settings, prompt) {
+async function callGeminiReview(settings, prompt, systemPromptOverride = "") {
   const apiKey = settings.apiKey.trim();
   const model = settings.model.trim();
   const baseUrl = settings.baseUrl.trim() || "https://generativelanguage.googleapis.com/v1beta";
@@ -288,7 +301,7 @@ async function callGeminiReview(settings, prompt) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts: [{ text: systemPromptOverride ? `${systemPromptOverride}\n\n${prompt}` : prompt }] }],
       generationConfig: {
         temperature: 0,
         topP: 0.1,
@@ -305,7 +318,7 @@ async function callGeminiReview(settings, prompt) {
   return text;
 }
 
-async function callAnthropicReview(settings, prompt) {
+async function callAnthropicReview(settings, prompt, systemPromptOverride = "") {
   const response = await fetch(resolveAnthropicUrl(settings), {
     method: "POST",
     headers: {
@@ -317,7 +330,7 @@ async function callAnthropicReview(settings, prompt) {
       model: settings.model.trim(),
       max_tokens: 1500,
       temperature: 0,
-      system: settings.systemPrompt,
+      system: systemPromptOverride || settings.systemPrompt,
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -330,7 +343,7 @@ async function callAnthropicReview(settings, prompt) {
   return text;
 }
 
-async function callOpenAiCompatibleReview(settings, prompt) {
+async function callOpenAiCompatibleReview(settings, prompt, systemPromptOverride = "") {
   const response = await fetch(resolveOpenAiCompatibleUrl(settings), {
     method: "POST",
     headers: {
@@ -342,7 +355,7 @@ async function callOpenAiCompatibleReview(settings, prompt) {
       temperature: 0,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: settings.systemPrompt },
+        { role: "system", content: systemPromptOverride || settings.systemPrompt },
         { role: "user", content: prompt },
       ],
     }),
@@ -432,6 +445,111 @@ function buildAiReviewStatus(reviewed) {
   if (reviewed.warnings?.length) parts.push(`warnings: ${reviewed.warnings.slice(0, 2).join("; ")}`);
   if (reviewed.missingFields?.length) parts.push(`missing: ${reviewed.missingFields.slice(0, 3).join(", ")}`);
   return parts.join(". ") + ".";
+}
+
+async function reviewAssessment() {
+  const settings = readAiSettings();
+  if (!settings.apiKey?.trim() || !settings.model?.trim() || !settings.provider?.trim()) {
+    setStatus("AI review is unavailable until provider, model, and API key are set.");
+    return;
+  }
+  const row = getFormData();
+  const assessment = assessRow(row);
+  const entries = buildHazardEntries(row, assessment);
+  const prompt = [
+    "Review this completed chemical safety assessment.",
+    "Check whether the extracted fields, wording, and resulting assessment look right.",
+    "Suggest only final targeted changes that should be applied.",
+    "Return strict JSON with this schema only:",
+    "{",
+    '  "looksGood": boolean,',
+    '  "summary": string,',
+    '  "warnings": string[],',
+    '  "suggestions": [{"field": string, "value": string, "reason": string}]',
+    "}",
+    "",
+    `Form data:\n${JSON.stringify(row, null, 2)}`,
+    "",
+    `Assessment summary:\n${JSON.stringify({
+      riskBand: assessment.riskBand,
+      hazardTags: assessment.hazardTags,
+      recommendedPpe: assessment.recommendedPpe,
+      engineeringControls: assessment.engineeringControls,
+      storageFlags: assessment.storageFlags,
+      wasteFlags: assessment.wasteFlags,
+      entries,
+    }, null, 2)}`,
+  ].join("\n");
+
+  setStatus("Reviewing assessment with AI...");
+  const rawResponse = await callAiReview(settings, prompt, ASSESSMENT_REVIEW_SYSTEM_PROMPT);
+  latestAssessmentReview = sanitizeAssessmentReview(parseAiJson(rawResponse));
+  renderAssessmentReview(latestAssessmentReview);
+  setStatus(latestAssessmentReview.looksGood ? "Assessment review complete. No changes suggested." : "Assessment review complete. Suggestions are ready to apply.");
+}
+
+function sanitizeAssessmentReview(reviewed) {
+  const safe = reviewed && typeof reviewed === "object" ? reviewed : {};
+  const allowedFields = new Set(["name", "cas", "ghsCodes", "physicalForm", "concentration", "assessor", "location", "date", "peopleCount", "supervisor", "notes", "nameDetails"]);
+  const suggestions = Array.isArray(safe.suggestions) ? safe.suggestions
+    .filter((item) => item && typeof item === "object" && allowedFields.has(String(item.field || "")))
+    .map((item) => ({
+      field: String(item.field),
+      value: normalizeFlatString(item.value),
+      reason: normalizeFlatString(item.reason),
+    }))
+    .filter((item) => item.value || item.reason) : [];
+  return {
+    looksGood: Boolean(safe.looksGood) && suggestions.length === 0,
+    summary: normalizeFlatString(safe.summary || ""),
+    warnings: Array.isArray(safe.warnings) ? safe.warnings.map(normalizeFlatString).filter(Boolean) : [],
+    suggestions,
+  };
+}
+
+function renderAssessmentReview(review) {
+  if (!review) {
+    ui.reviewSuggestions.classList.add("empty");
+    ui.reviewSuggestions.innerHTML = "No review suggestions yet.";
+    ui.applyReviewButton.disabled = true;
+    return;
+  }
+  const lines = [];
+  if (review.summary) lines.push(`<p><strong>Summary:</strong> ${escapeHtml(review.summary)}</p>`);
+  if (review.warnings.length) {
+    lines.push(`<p><strong>Warnings:</strong> ${review.warnings.map(escapeHtml).join("; ")}</p>`);
+  }
+  if (review.suggestions.length) {
+    lines.push("<ul class=\"review-suggestion-list\">");
+    for (const suggestion of review.suggestions) {
+      lines.push(`<li><strong>${escapeHtml(titleCase(suggestion.field))}:</strong> ${escapeHtml(suggestion.value || "(clear field)")}${suggestion.reason ? ` <span class="review-reason">(${escapeHtml(suggestion.reason)})</span>` : ""}</li>`);
+    }
+    lines.push("</ul>");
+  } else {
+    lines.push("<p>No suggested changes.</p>");
+  }
+  ui.reviewSuggestions.classList.remove("empty");
+  ui.reviewSuggestions.innerHTML = lines.join("");
+  ui.applyReviewButton.disabled = review.suggestions.length === 0;
+}
+
+function applyReviewSuggestions() {
+  if (!latestAssessmentReview?.suggestions?.length) {
+    setStatus("No review suggestions to apply.");
+    return;
+  }
+  for (const suggestion of latestAssessmentReview.suggestions) {
+    if (suggestion.field === "nameDetails") {
+      extractedNameDetails = suggestion.value;
+      continue;
+    }
+    if (form[suggestion.field]) {
+      form[suggestion.field].value = suggestion.value;
+    }
+  }
+  renderAssessment();
+  previewWorkbook();
+  setStatus("Applied AI review suggestions.");
 }
 
 function parseSdsText(text) {
