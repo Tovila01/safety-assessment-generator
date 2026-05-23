@@ -197,29 +197,29 @@ async function extractFromPdf() {
     const content = await page.getTextContent();
     text += content.items.map((item) => item.str).join(" ") + "\n";
   }
-  setStatus("Running local extraction...");
-  const extracted = parseSdsText(text);
-  setStatus("Running AI review...");
-  const reviewed = await reviewExtractionWithAi(text, extracted);
-  const finalExtraction = reviewed.extraction || extracted;
+  const fallbackExtraction = parseSdsText(text);
+  setStatus("Running AI extraction...");
+  const reviewed = await extractWithAiFromPdfText(text, fallbackExtraction);
+  const finalExtraction = reviewed.extraction || fallbackExtraction;
   const statusSuffix = reviewed.usedAi
     ? buildAiReviewStatus(reviewed)
-    : reviewed.reason || "AI review unavailable, using local extraction.";
+    : reviewed.reason || "AI extraction unavailable, using local fallback.";
   applyExtracted(finalExtraction);
   buildAssessment();
   setStatus(`PDF extraction complete. ${statusSuffix}`);
 }
 
-async function reviewExtractionWithAi(sourceText, initialExtraction) {
+async function extractWithAiFromPdfText(sourceText, fallbackExtraction) {
   const settings = readAiSettings();
   if (!settings.apiKey?.trim() || !settings.model?.trim() || !settings.provider?.trim()) {
-    return { usedAi: false, extraction: initialExtraction, warnings: [], reason: "AI review unavailable, using local extraction." };
+    return { usedAi: false, extraction: fallbackExtraction, warnings: [], reason: "AI extraction unavailable, using local fallback." };
   }
 
   const prompt = [
-    "You are reviewing a first-pass structured extraction from an SDS PDF.",
-    "Check it for flaws, OCR mistakes, unsupported values, missing values that are explicitly present, and wrongly normalized names.",
-    "Correct the extraction only when the source text clearly supports the correction.",
+    "You are extracting structured chemical safety information from SDS PDF text.",
+    "Read the provided PDF text directly and fill the form fields from the document itself.",
+    "This is primary extraction, not proofreading of an existing result.",
+    "Use only the source text. Do not use outside knowledge.",
     "Preserve empty fields if the source does not support a value.",
     "Return strict JSON with this schema only:",
     "{",
@@ -235,21 +235,19 @@ async function reviewExtractionWithAi(sourceText, initialExtraction) {
     '  "confidence": "high" | "medium" | "low"',
     "}",
     "",
-    `Initial extraction JSON:\n${JSON.stringify(initialExtraction, null, 2)}`,
-    "",
     `Source SDS text:\n${sourceText}`,
   ].join("\n");
 
   try {
     const rawResponse = await callAiReview(settings, prompt);
-    const reviewed = sanitizeAiReview(parseAiJson(rawResponse), initialExtraction);
+    const reviewed = sanitizeAiReview(parseAiJson(rawResponse), fallbackExtraction);
     return { usedAi: true, ...reviewed };
   } catch (error) {
     return {
       usedAi: false,
-      extraction: initialExtraction,
+      extraction: fallbackExtraction,
       warnings: [],
-      reason: `AI review failed, using local extraction (${error?.message || String(error)}).`,
+      reason: `AI extraction failed, using local fallback (${error?.message || String(error)}).`,
     };
   }
 }
@@ -339,7 +337,7 @@ async function callOpenAiCompatibleReview(settings, prompt) {
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data?.error?.message || "AI review request failed.");
+    throw new Error(data?.error?.message || "AI extraction request failed.");
   }
   const text = data?.choices?.[0]?.message?.content?.trim();
   if (!text) throw new Error("AI provider returned an empty response.");
@@ -370,7 +368,7 @@ function resolveAnthropicUrl(settings) {
 
 function parseAiJson(value) {
   const text = String(value || "").trim();
-  if (!text) throw new Error("AI review returned empty text.");
+  if (!text) throw new Error("AI extraction returned empty text.");
   try {
     return JSON.parse(text);
   } catch (_error) {
@@ -378,7 +376,7 @@ function parseAiJson(value) {
     if (fenced) return JSON.parse(fenced);
     const jsonBlock = text.match(/\{[\s\S]*\}/)?.[0];
     if (jsonBlock) return JSON.parse(jsonBlock);
-    throw new Error("AI review did not return valid JSON.");
+    throw new Error("AI extraction did not return valid JSON.");
   }
 }
 
@@ -417,7 +415,7 @@ function normalizeAiCodes(value) {
 }
 
 function buildAiReviewStatus(reviewed) {
-  const parts = [`AI review complete (${reviewed.confidence} confidence)`];
+  const parts = [`AI extraction complete (${reviewed.confidence} confidence)`];
   if (reviewed.warnings?.length) parts.push(`warnings: ${reviewed.warnings.slice(0, 2).join("; ")}`);
   if (reviewed.missingFields?.length) parts.push(`missing: ${reviewed.missingFields.slice(0, 3).join(", ")}`);
   return parts.join(". ") + ".";
