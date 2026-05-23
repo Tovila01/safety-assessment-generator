@@ -68,6 +68,13 @@ h1 {
   line-height: 1.55;
 }
 
+.version-stamp {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: rgba(31, 26, 23, 0.48);
+  letter-spacing: 0.01em;
+}
+
 .panel {
   padding: 24px;
   margin-top: 20px;
