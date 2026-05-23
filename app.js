@@ -190,6 +190,10 @@ document.querySelector("#reviewAssessmentButton").addEventListener("click", () =
 ui.applyReviewButton.addEventListener("click", () => runSafely(applyReviewSuggestions));
 aiSettingsForm.saveButton.addEventListener("click", saveAiSettings);
 aiSettingsForm.resetButton.addEventListener("click", resetAiSettings);
+form.assessor.addEventListener("change", persistHistoryField);
+form.assessor.addEventListener("blur", persistHistoryField);
+form.location.addEventListener("change", persistHistoryField);
+form.location.addEventListener("blur", persistHistoryField);
 form.manualRiskEnabled.addEventListener("change", renderAssessment);
 form.manualSeverity.addEventListener("change", renderAssessment);
 form.manualProbability.addEventListener("change", renderAssessment);
@@ -1122,6 +1126,10 @@ function saveFieldHistory() {
   localStorage.setItem(FIELD_HISTORY_STORAGE_KEY, JSON.stringify(next));
   renderDatalist(fieldHistoryUi.assessorOptions, next.assessor);
   renderDatalist(fieldHistoryUi.locationOptions, next.location);
+}
+
+function persistHistoryField() {
+  saveFieldHistory();
 }
 
 function mergeHistory(existing, value) {
