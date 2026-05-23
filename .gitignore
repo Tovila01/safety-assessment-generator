@@ -3,3 +3,4 @@
 *.pdf
 dist/
 config.local.json
+config.local.js

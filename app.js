@@ -108,7 +108,9 @@ const DEFAULT_AI_SETTINGS = {
     "Return valid JSON only.",
   ].join("\n"),
 };
-let localAiConfig = {};
+const localAiConfig = (typeof window !== "undefined" && window.SAFETY_ASSESSMENT_LOCAL_CONFIG && typeof window.SAFETY_ASSESSMENT_LOCAL_CONFIG === "object")
+  ? window.SAFETY_ASSESSMENT_LOCAL_CONFIG
+  : {};
 
 const form = {
   pdfFile: document.querySelector("#pdfFile"),
@@ -158,7 +160,7 @@ aiSettingsForm.saveButton.addEventListener("click", saveAiSettings);
 aiSettingsForm.resetButton.addEventListener("click", resetAiSettings);
 
 form.date.value = new Date().toLocaleDateString("en-GB").replace(/\//g, "/");
-await initializeApp();
+initializeApp();
 
 async function extractFromPdf() {
   const file = form.pdfFile.files?.[0];
@@ -541,21 +543,9 @@ function setStatus(message) {
   ui.status.textContent = message;
 }
 
-async function initializeApp() {
-  localAiConfig = await loadLocalAiConfig();
+function initializeApp() {
   loadAiSettings();
   renderAssessment();
-}
-
-async function loadLocalAiConfig() {
-  try {
-    const response = await fetch("./config.local.json", { cache: "no-store" });
-    if (!response.ok) return {};
-    const parsed = await response.json();
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (_error) {
-    return {};
-  }
 }
 
 function getEffectiveDefaultAiSettings() {
