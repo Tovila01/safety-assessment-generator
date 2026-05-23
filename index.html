@@ -185,45 +185,52 @@ Return valid JSON only.</textarea>
           </article>
         </div>
 
-        <div class="manual-risk-panel">
-          <div class="panel-header manual-risk-header">
-            <h3>Manual Risk Override</h3>
-            <p>Use your own reasoning to assess hazard, severity, and probability.</p>
+        <details class="manual-risk-panel">
+          <summary class="expandable-summary">
+            <span>Manual Risk Override</span>
+            <small>Optional user override. Automatic method stays default.</small>
+          </summary>
+
+          <div class="expandable-body">
+            <div class="panel-header manual-risk-header">
+              <h3>Manual Risk Override</h3>
+              <p>Use your own reasoning to assess hazard, severity, and probability.</p>
+            </div>
+
+            <label class="manual-risk-toggle">
+              <span>Use manual risk rating</span>
+              <input id="manualRiskEnabled" type="checkbox" />
+            </label>
+
+            <div class="manual-risk-grid">
+              <label>
+                <span>Hazard score (0 to 4)</span>
+                <input id="manualHazardScore" type="range" min="0" max="4" step="1" value="2" />
+                <small id="manualHazardDisplay">2 - Moderate hazard</small>
+              </label>
+              <label>
+                <span>Severity</span>
+                <select id="manualSeverity">
+                  <option value="low">Low</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+              <label>
+                <span>Probability</span>
+                <select id="manualProbability">
+                  <option value="unlikely">Unlikely</option>
+                  <option value="likely" selected>Likely</option>
+                  <option value="highly_likely">Highly likely</option>
+                </select>
+              </label>
+            </div>
+
+            <p id="manualRiskSummary" class="method-note">
+              Manual matrix score: 4. Manual risk level: Medium.
+            </p>
           </div>
-
-          <label class="manual-risk-toggle">
-            <span>Use manual risk rating</span>
-            <input id="manualRiskEnabled" type="checkbox" />
-          </label>
-
-          <div class="manual-risk-grid">
-            <label>
-              <span>Hazard score (0 to 4)</span>
-              <input id="manualHazardScore" type="range" min="0" max="4" step="1" value="2" />
-              <small id="manualHazardDisplay">2 - Moderate hazard</small>
-            </label>
-            <label>
-              <span>Severity</span>
-              <select id="manualSeverity">
-                <option value="low">Low</option>
-                <option value="medium" selected>Medium</option>
-                <option value="high">High</option>
-              </select>
-            </label>
-            <label>
-              <span>Probability</span>
-              <select id="manualProbability">
-                <option value="unlikely">Unlikely</option>
-                <option value="likely" selected>Likely</option>
-                <option value="highly_likely">Highly likely</option>
-              </select>
-            </label>
-          </div>
-
-          <p id="manualRiskSummary" class="method-note">
-            Manual matrix score: 4. Manual risk level: Medium.
-          </p>
-        </div>
+        </details>
 
         <div class="table-wrap">
           <table>
@@ -266,70 +273,79 @@ Return valid JSON only.</textarea>
           <p>Reference explanation for how a chemical risk rating can be assessed.</p>
         </div>
 
-        <div class="method-grid">
-          <article class="detail-card">
-            <h3>1. Identify the Hazards</h3>
-            <p>Most workplaces start from standardized hazard information such as GHS / CLP or NFPA-style hazard levels.</p>
-            <ul class="method-list">
-              <li><strong>0</strong>: Minimal hazard</li>
-              <li><strong>1</strong>: Slight hazard</li>
-              <li><strong>2</strong>: Moderate hazard</li>
-              <li><strong>3</strong>: Serious hazard</li>
-              <li><strong>4</strong>: Extreme or severe danger</li>
-            </ul>
-          </article>
+        <details class="method-panel">
+          <summary class="expandable-summary">
+            <span>Open Risk Rating Explanation</span>
+            <small>Reference method and action bands</small>
+          </summary>
 
-          <article class="detail-card">
-            <h3>2. Assess Severity</h3>
-            <ul class="method-list">
-              <li><strong>Low</strong>: Minor injury or reversible health effects</li>
-              <li><strong>Medium</strong>: Medical treatment required</li>
-              <li><strong>High</strong>: Serious injury, long-term health effects, or death</li>
-            </ul>
-          </article>
+          <div class="expandable-body">
+            <div class="method-grid">
+              <article class="detail-card">
+                <h3>1. Identify the Hazards</h3>
+                <p>Most workplaces start from standardized hazard information such as GHS / CLP or NFPA-style hazard levels.</p>
+                <ul class="method-list">
+                  <li><strong>0</strong>: Minimal hazard</li>
+                  <li><strong>1</strong>: Slight hazard</li>
+                  <li><strong>2</strong>: Moderate hazard</li>
+                  <li><strong>3</strong>: Serious hazard</li>
+                  <li><strong>4</strong>: Extreme or severe danger</li>
+                </ul>
+              </article>
 
-          <article class="detail-card">
-            <h3>3. Assess Probability</h3>
-            <ul class="method-list">
-              <li><strong>Unlikely</strong>: Adverse event occurs only rarely</li>
-              <li><strong>Likely</strong>: Event occurs on a frequent basis</li>
-              <li><strong>Highly likely</strong>: Adverse event is almost certain to occur</li>
-            </ul>
-          </article>
-        </div>
+              <article class="detail-card">
+                <h3>2. Assess Severity</h3>
+                <ul class="method-list">
+                  <li><strong>Low</strong>: Minor injury or reversible health effects</li>
+                  <li><strong>Medium</strong>: Medical treatment required</li>
+                  <li><strong>High</strong>: Serious injury, long-term health effects, or death</li>
+                </ul>
+              </article>
 
-        <div class="table-wrap method-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Risk level</th>
-                <th>Matrix score</th>
-                <th>Action required</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Low</td>
-                <td>1 to 2</td>
-                <td>Acceptable. Maintain existing controls. No further action normally needed.</td>
-              </tr>
-              <tr>
-                <td>Medium</td>
-                <td>3 to 6</td>
-                <td>Tolerable. Review whether extra controls such as ventilation or PPE are justified.</td>
-              </tr>
-              <tr>
-                <td>High</td>
-                <td>8 to 16</td>
-                <td>Unacceptable. Stop the process until engineering and safety controls are in place.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+              <article class="detail-card">
+                <h3>3. Assess Probability</h3>
+                <ul class="method-list">
+                  <li><strong>Unlikely</strong>: Adverse event occurs only rarely</li>
+                  <li><strong>Likely</strong>: Event occurs on a frequent basis</li>
+                  <li><strong>Highly likely</strong>: Adverse event is almost certain to occur</li>
+                </ul>
+              </article>
+            </div>
 
-        <p class="method-note">
-          Current app behavior: this tool still uses a simplified internal worst-case method based on extracted H-codes. It does not yet calculate a full exposure-based probability × severity matrix automatically.
-        </p>
+            <div class="table-wrap method-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Risk level</th>
+                    <th>Matrix score</th>
+                    <th>Action required</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Low</td>
+                    <td>1 to 2</td>
+                    <td>Acceptable. Maintain existing controls. No further action normally needed.</td>
+                  </tr>
+                  <tr>
+                    <td>Medium</td>
+                    <td>3 to 6</td>
+                    <td>Tolerable. Review whether extra controls such as ventilation or PPE are justified.</td>
+                  </tr>
+                  <tr>
+                    <td>High</td>
+                    <td>8 to 16</td>
+                    <td>Unacceptable. Stop the process until engineering and safety controls are in place.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p class="method-note">
+              Current app behavior: this tool still uses a simplified internal worst-case method based on extracted H-codes. It does not yet calculate a full exposure-based probability × severity matrix automatically.
+            </p>
+          </div>
+        </details>
       </section>
 
       <section class="panel workbook-panel">

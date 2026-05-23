@@ -229,10 +229,43 @@ select {
 
 .manual-risk-panel {
   margin-bottom: 18px;
-  padding: 16px;
   border: 1px solid rgba(138, 59, 18, 0.12);
   border-radius: 16px;
   background: linear-gradient(180deg, #fffdf8 0%, #fbf5eb 100%);
+}
+
+.method-panel {
+  border: 1px solid rgba(138, 59, 18, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdf8 0%, #fbf5eb 100%);
+}
+
+.expandable-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.expandable-summary::-webkit-details-marker {
+  display: none;
+}
+
+.expandable-summary span {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.expandable-summary small {
+  color: var(--muted);
+  text-align: right;
+}
+
+.expandable-body {
+  padding: 0 16px 16px;
 }
 
 .manual-risk-header {
