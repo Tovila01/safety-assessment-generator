@@ -140,6 +140,7 @@ const aiSettingsForm = {
 
 const ui = {
   status: document.querySelector("#status"),
+  versionStamp: document.querySelector("#versionStamp"),
   riskRating: document.querySelector("#riskRating"),
   hazardTags: document.querySelector("#hazardTags"),
   ppeSummary: document.querySelector("#ppeSummary"),
@@ -544,8 +545,23 @@ function setStatus(message) {
 }
 
 function initializeApp() {
+  updateVersionStamp();
   loadAiSettings();
   renderAssessment();
+}
+
+function updateVersionStamp() {
+  const stamp = new Date(document.lastModified);
+  if (Number.isNaN(stamp.getTime())) {
+    ui.versionStamp.textContent = "Last edited: unknown";
+    return;
+  }
+  const yyyy = stamp.getUTCFullYear();
+  const mm = String(stamp.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(stamp.getUTCDate()).padStart(2, "0");
+  const hh = String(stamp.getUTCHours()).padStart(2, "0");
+  const min = String(stamp.getUTCMinutes()).padStart(2, "0");
+  ui.versionStamp.textContent = `Last edited: ${yyyy}-${mm}-${dd} ${hh}:${min} UTC`;
 }
 
 function getEffectiveDefaultAiSettings() {
@@ -600,7 +616,7 @@ function normalizeAiSettings(saved) {
   const effectiveDefaults = getEffectiveDefaultAiSettings();
   const migrated = {
     ...effectiveDefaults,
-    apiKey: typeof incoming.apiKey === "string" ? incoming.apiKey : effectiveDefaults.apiKey,
+    apiKey: typeof incoming.apiKey === "string" && incoming.apiKey.trim() ? incoming.apiKey : effectiveDefaults.apiKey,
     baseUrl: typeof incoming.baseUrl === "string" ? incoming.baseUrl : effectiveDefaults.baseUrl,
   };
   localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(migrated));
