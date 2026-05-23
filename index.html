@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Safety Assessment Generator</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Safety Assessment Generator</p>
+        <h1>Standardized chemical risk assessments in the browser</h1>
+        <p class="lead">
+          Extract baseline safety data from an SDS PDF, normalize the chemical name,
+          apply deterministic hazard rules, and export a compact workbook.
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Input</h2>
+          <p>Upload a PDF or fill the fields manually.</p>
+        </div>
+
+        <div class="toolbar">
+          <label class="file-input">
+            <span>SDS PDF</span>
+            <input id="pdfFile" type="file" accept="application/pdf" />
+          </label>
+          <button id="extractPdfButton" class="button button-primary" type="button">Extract from PDF</button>
+          <button id="buildButton" class="button" type="button">Build Assessment</button>
+          <button id="downloadButton" class="button button-accent" type="button">Download XLSX</button>
+        </div>
+
+        <p id="status" class="status">Ready.</p>
+
+        <div class="grid">
+          <label>
+            <span>Chemical name</span>
+            <input id="name" type="text" />
+          </label>
+          <label>
+            <span>CAS</span>
+            <input id="cas" type="text" />
+          </label>
+          <label>
+            <span>GHS codes</span>
+            <input id="ghsCodes" type="text" placeholder="H225;H319;H336" />
+          </label>
+          <label>
+            <span>Signal word</span>
+            <input id="signalWord" type="text" />
+          </label>
+          <label>
+            <span>Physical form</span>
+            <input id="physicalForm" type="text" />
+          </label>
+          <label>
+            <span>Concentration</span>
+            <input id="concentration" type="text" />
+          </label>
+          <label>
+            <span>Assessor</span>
+            <input id="assessor" type="text" />
+          </label>
+          <label>
+            <span>Location</span>
+            <input id="location" type="text" />
+          </label>
+          <label>
+            <span>Date</span>
+            <input id="date" type="text" />
+          </label>
+          <label>
+            <span>People count</span>
+            <input id="peopleCount" type="text" value="1" />
+          </label>
+          <label>
+            <span>Supervisor</span>
+            <input id="supervisor" type="text" />
+          </label>
+        </div>
+
+        <label class="full-width">
+          <span>Notes</span>
+          <textarea id="notes" rows="4"></textarea>
+        </label>
+      </section>
+
+      <section class="panel output-panel">
+        <div class="panel-header">
+          <h2>Assessment</h2>
+          <p>Deterministic output from the current form state.</p>
+        </div>
+
+        <div class="summary">
+          <article class="summary-card">
+            <span class="summary-label">Risk rating</span>
+            <strong id="riskRating">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">Hazard tags</span>
+            <strong id="hazardTags">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">Recommended PPE</span>
+            <strong id="ppeSummary">-</strong>
+          </article>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th>Hazard</th>
+                <th>Risk</th>
+                <th>Protection / Prevention</th>
+                <th>Rating</th>
+              </tr>
+            </thead>
+            <tbody id="hazardTableBody"></tbody>
+          </table>
+        </div>
+
+        <div class="detail-grid">
+          <article class="detail-card">
+            <h3>Firefighting</h3>
+            <p id="fireText">-</p>
+          </article>
+          <article class="detail-card">
+            <h3>Spill Precautions</h3>
+            <p id="spillPrecautions">-</p>
+          </article>
+          <article class="detail-card">
+            <h3>Spill Cleanup</h3>
+            <p id="spillCleanup">-</p>
+          </article>
+          <article class="detail-card">
+            <h3>First Aid</h3>
+            <ul id="firstAidList"></ul>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

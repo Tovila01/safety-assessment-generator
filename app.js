@@ -1,0 +1,421 @@
+const HAZARD_RULES = {
+  H225: { severity: 4, tags: ["flammable"], ppe: ["safety_glasses", "lab_coat", "nitrile_gloves"], controls: ["keep_away_from_ignition", "use_in_ventilated_area"], storage: ["flammables_cabinet"], waste: ["flammable_organic_waste"] },
+  H290: { severity: 3, tags: ["corrosive_to_metals"], ppe: ["safety_glasses", "lab_coat", "nitrile_gloves"], controls: ["segregate_from_metals"], storage: ["corrosives_storage"], waste: ["corrosive_waste"] },
+  H300: { severity: 5, tags: ["acute_toxicity_oral"], ppe: ["safety_glasses", "lab_coat", "nitrile_gloves"], controls: ["avoid_all_ingestion", "restricted_handling"], storage: ["toxics_storage"], waste: ["hazardous_toxic_waste"] },
+  H301: { severity: 4, tags: ["toxic_if_swallowed"], ppe: ["safety_glasses", "lab_coat", "nitrile_gloves"], controls: ["avoid_all_ingestion"], storage: ["toxics_storage"], waste: ["hazardous_toxic_waste"] },
+  H314: { severity: 5, tags: ["corrosive", "skin_burns", "eye_damage"], ppe: ["chemical_goggles", "lab_coat", "chemical_resistant_gloves"], controls: ["use_fume_hood_if_volatile", "have_spill_kit_ready"], storage: ["corrosives_storage"], waste: ["corrosive_waste"] },
+  H319: { severity: 2, tags: ["eye_irritant"], ppe: ["safety_glasses", "lab_coat", "nitrile_gloves"], controls: [], storage: [], waste: [] },
+  H335: { severity: 3, tags: ["respiratory_irritant"], ppe: ["safety_glasses", "lab_coat", "nitrile_gloves"], controls: ["use_fume_hood"], storage: [], waste: [] },
+  H336: { severity: 2, tags: ["narcotic_effects"], ppe: ["safety_glasses", "lab_coat", "nitrile_gloves"], controls: ["use_in_ventilated_area"], storage: [], waste: [] },
+  H351: { severity: 4, tags: ["suspected_carcinogen"], ppe: ["safety_glasses", "lab_coat", "chemical_resistant_gloves"], controls: ["use_fume_hood", "minimize_exposure", "avoid_repeated_exposure"], storage: ["health_hazard_storage"], waste: ["hazardous_organic_waste"] },
+  H360: { severity: 5, tags: ["reproductive_toxicity"], ppe: ["safety_glasses", "lab_coat", "chemical_resistant_gloves"], controls: ["use_fume_hood", "minimize_exposure", "avoid_skin_contact", "restricted_handling"], storage: ["health_hazard_storage"], waste: ["hazardous_organic_waste"] },
+  H410: { severity: 4, tags: ["aquatic_toxicity"], ppe: ["safety_glasses", "lab_coat", "nitrile_gloves"], controls: ["prevent_release_to_drain"], storage: [], waste: ["hazardous_aqueous_waste"] },
+};
+
+const USE_HAZARD_PRIORITY = [
+  "flammable",
+  "acute_toxicity_oral",
+  "toxic_if_swallowed",
+  "corrosive",
+  "eye_irritant",
+  "respiratory_irritant",
+  "narcotic_effects",
+  "suspected_carcinogen",
+  "reproductive_toxicity",
+  "aquatic_toxicity",
+];
+
+const HAZARD_LIBRARY = {
+  flammable: { hazard: "Highly flammable", risk: "Fire", controls: ["Keep away from sources of ignition.", "Use only in a well ventilated area."] },
+  acute_toxicity_oral: { hazard: "Acute toxicity", risk: "Poisoning if swallowed", controls: ["Avoid ingestion.", "Do not work alone if high-toxicity handling is required."] },
+  toxic_if_swallowed: { hazard: "Toxic if swallowed", risk: "Poisoning if swallowed", controls: ["Avoid ingestion.", "Wash hands after handling."] },
+  corrosive: { hazard: "Corrosive", risk: "Skin burns or serious eye damage", controls: ["Wear splash protection and suitable gloves.", "Handle carefully and avoid direct contact."] },
+  eye_irritant: { hazard: "Eye irritant", risk: "Eye irritation", controls: ["Wear safety glasses or goggles."] },
+  respiratory_irritant: { hazard: "Respiratory irritant", risk: "Respiratory irritation", controls: ["Avoid breathing vapours or dust.", "Use in a fume hood or well ventilated area."] },
+  narcotic_effects: { hazard: "Vapour exposure", risk: "Drowsiness or dizziness", controls: ["Avoid breathing vapours.", "Use in a well ventilated area."] },
+  suspected_carcinogen: { hazard: "Suspected carcinogen", risk: "Long-term health effects", controls: ["Minimize exposure.", "Use in a fume hood."] },
+  reproductive_toxicity: { hazard: "Reproductive toxin", risk: "Reproductive health effects", controls: ["Minimize exposure.", "Avoid skin contact and inhalation."] },
+  aquatic_toxicity: { hazard: "Environmental hazard", risk: "Environmental release", controls: ["Prevent release to drains."] },
+};
+
+const STANDARD_TEXT = {
+  fire: {
+    flammable: "Use water spray, alcohol-resistant foam, dry chemical or carbon dioxide. Do not use water jetstream.",
+    default: "Use extinguishing media appropriate to surrounding materials.",
+  },
+  storage: {
+    flammable: "Store in flammables area or solvent cabinet.",
+    corrosive: "Store in corrosives storage.",
+    suspected_carcinogen: "Store in designated health hazard storage.",
+    reproductive_toxicity: "Store in designated health hazard storage.",
+    default: "Store in a compatible, clearly labelled container.",
+  },
+  disposal: {
+    flammable: "Collect in non-halogenated or flammable solvent waste.",
+    corrosive: "Collect in corrosive hazardous waste.",
+    aquatic_toxicity: "Collect as hazardous waste and prevent release to drains.",
+    default: "Dispose of as hazardous waste according to local rules.",
+  },
+  spillPrecautions: {
+    default: ["Use personal protective equipment.", "Ensure adequate ventilation."],
+    flammable: ["Remove all sources of ignition.", "Use non-sparking equipment if required."],
+  },
+  spillCleanup: {
+    default: ["Absorb with inert material.", "Transfer waste to a suitable closed container."],
+    aquatic_toxicity: ["Prevent release to drains.", "Collect spill for hazardous disposal."],
+  },
+  firstAid: {
+    ingestion: "If swallowed: rinse mouth with water. Seek medical attention if symptoms occur.",
+    inhalation: "If inhaled: move to fresh air and seek medical attention if symptoms persist.",
+    eyes: "If in eyes: rinse cautiously with water for several minutes and seek advice if irritation persists.",
+    skin: "If on skin: wash thoroughly with water and remove contaminated clothing.",
+  },
+};
+
+const form = {
+  pdfFile: document.querySelector("#pdfFile"),
+  name: document.querySelector("#name"),
+  cas: document.querySelector("#cas"),
+  ghsCodes: document.querySelector("#ghsCodes"),
+  signalWord: document.querySelector("#signalWord"),
+  physicalForm: document.querySelector("#physicalForm"),
+  concentration: document.querySelector("#concentration"),
+  assessor: document.querySelector("#assessor"),
+  location: document.querySelector("#location"),
+  date: document.querySelector("#date"),
+  peopleCount: document.querySelector("#peopleCount"),
+  supervisor: document.querySelector("#supervisor"),
+  notes: document.querySelector("#notes"),
+};
+
+const ui = {
+  status: document.querySelector("#status"),
+  riskRating: document.querySelector("#riskRating"),
+  hazardTags: document.querySelector("#hazardTags"),
+  ppeSummary: document.querySelector("#ppeSummary"),
+  hazardTableBody: document.querySelector("#hazardTableBody"),
+  fireText: document.querySelector("#fireText"),
+  spillPrecautions: document.querySelector("#spillPrecautions"),
+  spillCleanup: document.querySelector("#spillCleanup"),
+  firstAidList: document.querySelector("#firstAidList"),
+};
+
+document.querySelector("#extractPdfButton").addEventListener("click", extractFromPdf);
+document.querySelector("#buildButton").addEventListener("click", renderAssessment);
+document.querySelector("#downloadButton").addEventListener("click", downloadWorkbook);
+
+form.date.value = new Date().toLocaleDateString("en-GB").replace(/\//g, "/");
+renderAssessment();
+
+async function extractFromPdf() {
+  const file = form.pdfFile.files?.[0];
+  if (!file) {
+    setStatus("Choose a PDF first.");
+    return;
+  }
+  setStatus("Reading PDF...");
+  const pdfjsLib = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+  const data = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  let text = "";
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    text += content.items.map((item) => item.str).join(" ") + "\n";
+  }
+  const extracted = parseSdsText(text);
+  applyExtracted(extracted);
+  renderAssessment();
+  setStatus("PDF extraction complete.");
+}
+
+function parseSdsText(text) {
+  const productDescription = text.match(/Product Description\s*:?\s*([^\n]+?)(?=\s{2,}|Synonyms|Cat No|CAS No|Index No)/i)?.[1];
+  const synonym = text.match(/Synonyms\s+([^\n]+?)(?=\s{2,}|Index No|CAS No|EC No)/i)?.[1];
+  const signalWord = text.match(/Signal Word\s+([A-Za-z]+)/i)?.[1] || "";
+  const cas = text.match(/CAS No\.?\s*([0-9-]+)/i)?.[1] || "";
+  const weight = text.match(/Weight\s*%\s*([^\n]+?)(?=\s{2,}|Flam\.|Eye Irrit|STOT|$)/i)?.[1] || "";
+  const hCodes = Array.from(new Set((text.match(/\b(?:EUH\d+|H\d{3})\b/g) || []).map((code) => code.toUpperCase())));
+  const physicalForm = /physical state\s+liquid/i.test(text) ? "Liquid" : (/physical state\s+solid/i.test(text) ? "Solid" : "");
+  const notes = summarizeHazardsFromCodes(hCodes);
+  return {
+    name: canonicalizeChemicalName(productDescription || synonym || ""),
+    cas,
+    ghsCodes: hCodes.join(";"),
+    signalWord,
+    concentration: weight.replace(/\s+/g, " ").trim(),
+    physicalForm,
+    notes,
+  };
+}
+
+function applyExtracted(extracted) {
+  for (const [key, value] of Object.entries(extracted)) {
+    if (key === "ghsCodes") form.ghsCodes.value = value || form.ghsCodes.value;
+    else if (key === "signalWord") form.signalWord.value = value || form.signalWord.value;
+    else if (key === "physicalForm") form.physicalForm.value = value || form.physicalForm.value;
+    else if (key === "concentration") form.concentration.value = value || form.concentration.value;
+    else if (key === "notes") form.notes.value = value || form.notes.value;
+    else if (form[key]) form[key].value = value || form[key].value;
+  }
+}
+
+function renderAssessment() {
+  const row = getFormData();
+  const assessment = assessRow(row);
+  const entries = buildHazardEntries(row, assessment);
+
+  ui.riskRating.textContent = titleCase(assessment.riskBand);
+  ui.hazardTags.textContent = assessment.hazardTags.length ? assessment.hazardTags.map(pretty).join(", ") : "-";
+  ui.ppeSummary.textContent = normalizePpe(assessment.recommendedPpe).join(", ");
+  ui.hazardTableBody.innerHTML = entries.map((entry) => `
+    <tr>
+      <td>${escapeHtml(entry.area)}</td>
+      <td>${escapeHtml(entry.hazard)}</td>
+      <td>${escapeHtml(entry.risk)}</td>
+      <td>${escapeHtml(entry.controls).replace(/\n/g, "<br>")}</td>
+      <td>${escapeHtml(entry.rating)}</td>
+    </tr>
+  `).join("");
+
+  ui.fireText.textContent = summarizeFirefighting(assessment.hazardTags);
+  ui.spillPrecautions.textContent = summarizeSpillPrecautions(assessment.hazardTags, assessment.engineeringControls).replace(/\n/g, " ");
+  ui.spillCleanup.textContent = summarizeSpillCleanup(assessment.hazardTags, assessment.wasteFlags).replace(/\n/g, " ");
+
+  const firstAid = summarizeFirstAid(assessment.hazardTags);
+  ui.firstAidList.innerHTML = Object.values(firstAid).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  setStatus("Assessment updated.");
+}
+
+function getFormData() {
+  return {
+    name: canonicalizeChemicalName(form.name.value),
+    cas: form.cas.value.trim(),
+    ghsCodes: form.ghsCodes.value.trim(),
+    signalWord: form.signalWord.value.trim(),
+    physicalForm: form.physicalForm.value.trim(),
+    concentration: form.concentration.value.trim(),
+    assessor: form.assessor.value.trim(),
+    location: form.location.value.trim(),
+    date: form.date.value.trim(),
+    peopleCount: form.peopleCount.value.trim() || "1",
+    supervisor: form.supervisor.value.trim(),
+    notes: form.notes.value.trim(),
+  };
+}
+
+function assessRow(row) {
+  const codes = normalizeCodes(row.ghsCodes);
+  const matched = codes.map((code) => HAZARD_RULES[code]).filter(Boolean);
+  const severity = matched.length ? Math.max(...matched.map((rule) => rule.severity || 1)) : 1;
+  const hazardTags = unique(matched.flatMap((rule) => rule.tags || []));
+  const recommendedPpe = unique(matched.flatMap((rule) => rule.ppe || []));
+  const engineeringControls = unique(matched.flatMap((rule) => rule.controls || []));
+  const storageFlags = unique(matched.flatMap((rule) => rule.storage || []));
+  const wasteFlags = unique(matched.flatMap((rule) => rule.waste || []));
+  return {
+    codes,
+    severity,
+    riskBand: riskBand(severity),
+    hazardTags,
+    recommendedPpe,
+    engineeringControls,
+    storageFlags,
+    wasteFlags,
+  };
+}
+
+function buildHazardEntries(row, assessment) {
+  const band = titleCase(assessment.riskBand);
+  const tags = orderedUseTags(assessment.hazardTags);
+  const entries = [];
+
+  entries.push({
+    area: "Storage",
+    hazard: tags[0] ? HAZARD_LIBRARY[tags[0]]?.hazard || "Chemical hazard" : "Chemical hazard",
+    risk: primaryRiskText(tags) || "Exposure",
+    controls: summarizeStorage(tags, assessment.storageFlags),
+    rating: band,
+  });
+
+  for (const [index, tag] of tags.entries()) {
+    const template = HAZARD_LIBRARY[tag] || { hazard: "Handling exposure", risk: primaryRiskText(tags) || "Exposure", controls: ["Review SDS before use."] };
+    entries.push({
+      area: index === 0 ? "Use" : "",
+      hazard: template.hazard,
+      risk: template.risk,
+      controls: template.controls.join("\n"),
+      rating: band,
+    });
+  }
+
+  entries.push({
+    area: "Waste",
+    hazard: tags[0] ? HAZARD_LIBRARY[tags[0]]?.hazard || "Hazardous waste" : "Hazardous waste",
+    risk: primaryRiskText(tags) || "Exposure or environmental release",
+    controls: summarizeDisposal(tags, assessment.wasteFlags),
+    rating: band,
+  });
+  return entries.slice(0, 6);
+}
+
+function downloadWorkbook() {
+  const row = getFormData();
+  const assessment = assessRow(row);
+  const entries = buildHazardEntries(row, assessment);
+  const firstAid = summarizeFirstAid(assessment.hazardTags);
+  const data = [
+    ["Chemical Risk Assessment Form"],
+    [],
+    ["Chemical Name", "", row.name, "", "Assessor", row.assessor],
+    [],
+    ["Location/Room No.", "", row.location, "", "Date", row.date],
+    ["No. of people working in this location", "", row.peopleCount],
+    [],
+    ["Area", "Hazard", "Risks", "Protection and Prevention Measures", "", "Risk Rating"],
+    ...entries.map((entry) => [entry.area, entry.hazard, entry.risk, entry.controls, "", entry.rating]),
+    [],
+    ["Emergency Procedures"],
+    ["In case of fire:"],
+    ["Extinguishing media:", "", summarizeFirefighting(assessment.hazardTags)],
+    [],
+    ["In case of accidental release:"],
+    ["Precautions", "", summarizeSpillPrecautions(assessment.hazardTags, assessment.engineeringControls)],
+    ["Cleanup", "", summarizeSpillCleanup(assessment.hazardTags, assessment.wasteFlags)],
+    [],
+    ["Personal Protection Equipment"],
+    ["", "", normalizePpe(assessment.recommendedPpe).join(". ")],
+    [],
+    ["First Aid"],
+    ["", "", firstAid.ingestion],
+    ["", "", firstAid.inhalation],
+    ["", "", firstAid.eyes],
+    ["", "", firstAid.skin],
+    [],
+    ["Other Information"],
+    ["", "", [`CAS: ${row.cas || "-"}`, `GHS: ${assessment.codes.join(", ") || "-"}`, `Signal word: ${row.signalWord || "-"}`].join("\n")],
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"] = [{ wch: 22 }, { wch: 24 }, { wch: 30 }, { wch: 46 }, { wch: 4 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, ws, "Risk Assessment");
+  const baseName = slugify(row.name || "chemical");
+  XLSX.writeFile(wb, `${baseName}.xlsx`);
+  setStatus(`Downloaded ${baseName}.xlsx`);
+}
+
+function normalizeCodes(raw) {
+  return raw.split(/[;,]/).map((item) => item.trim().toUpperCase()).filter(Boolean);
+}
+
+function canonicalizeChemicalName(value) {
+  let text = String(value || "").trim();
+  text = text.replace(/\([^)]*\)/g, "");
+  text = text.replace(/\[[^\]]*\]/g, "");
+  text = text.replace(/,?\s+\b(technical|laboratory|lab|solution|mixture|reagent|absolute|anhydrous)\b.*$/i, "");
+  text = text.replace(/\s+\d+(?:[.,]\d+)?\s*%.*$/i, "");
+  text = text.replace(/\s+\b\d+(?:[.,]\d+)?\s*(?:wt%|w\/w|v\/v|vol%|purity)\b.*$/i, "");
+  return text.replace(/\s{2,}/g, " ").trim().replace(/[ ,;-]+$/, "");
+}
+
+function summarizeHazardsFromCodes(codes) {
+  const parts = [];
+  if (codes.includes("H225")) parts.push("Highly flammable liquid and vapour.");
+  if (codes.includes("H319")) parts.push("Causes serious eye irritation.");
+  if (codes.includes("H336")) parts.push("May cause drowsiness or dizziness.");
+  return parts.join(" ");
+}
+
+function riskBand(severity) {
+  if (severity >= 5) return "critical";
+  if (severity === 4) return "high";
+  if (severity === 3) return "medium";
+  if (severity === 2) return "low";
+  return "minimal";
+}
+
+function orderedUseTags(tags) {
+  const ordered = USE_HAZARD_PRIORITY.filter((tag) => tags.includes(tag));
+  return ordered.length ? ordered : tags;
+}
+
+function primaryRiskText(tags) {
+  for (const tag of tags) {
+    if (HAZARD_LIBRARY[tag]?.risk) return HAZARD_LIBRARY[tag].risk;
+  }
+  return "";
+}
+
+function summarizeStorage(tags, storageFlags) {
+  for (const tag of tags) {
+    if (STANDARD_TEXT.storage[tag]) return STANDARD_TEXT.storage[tag];
+  }
+  return storageFlags.length ? "Store according to designated hazardous chemical storage." : STANDARD_TEXT.storage.default;
+}
+
+function summarizeDisposal(tags, wasteFlags) {
+  for (const tag of tags) {
+    if (STANDARD_TEXT.disposal[tag]) return STANDARD_TEXT.disposal[tag];
+  }
+  return wasteFlags.length ? "Collect in the designated hazardous waste stream." : STANDARD_TEXT.disposal.default;
+}
+
+function summarizeFirefighting(tags) {
+  return tags.includes("flammable") ? STANDARD_TEXT.fire.flammable : STANDARD_TEXT.fire.default;
+}
+
+function summarizeSpillPrecautions(tags, controls) {
+  const lines = [...STANDARD_TEXT.spillPrecautions.default];
+  if (tags.includes("flammable")) lines.push(...STANDARD_TEXT.spillPrecautions.flammable);
+  if (controls.length) lines.push(pretty(controls[0]).replace(/_/g, " ") + ".");
+  return unique(lines).slice(0, 3).join("\n");
+}
+
+function summarizeSpillCleanup(tags, wasteFlags) {
+  const lines = tags.includes("aquatic_toxicity") ? [...STANDARD_TEXT.spillCleanup.aquatic_toxicity] : [...STANDARD_TEXT.spillCleanup.default];
+  if (wasteFlags.length) lines.push(pretty(wasteFlags[0]).replace(/_/g, " ") + ".");
+  return unique(lines).slice(0, 3).join("\n");
+}
+
+function summarizeFirstAid(tags) {
+  const result = { ...STANDARD_TEXT.firstAid };
+  if (tags.includes("acute_toxicity_oral") || tags.includes("toxic_if_swallowed")) {
+    result.ingestion = "If swallowed: rinse mouth with water. Seek immediate medical attention.";
+  }
+  if (tags.includes("corrosive")) {
+    result.eyes = "If in eyes: rinse cautiously with water for several minutes and seek immediate medical attention.";
+    result.skin = "If on skin: wash immediately with plenty of water and remove contaminated clothing.";
+  }
+  return result;
+}
+
+function normalizePpe(items) {
+  const merged = unique(["nitrile_gloves", "safety_glasses", "lab_coat", ...items]);
+  return merged.slice(0, 3).map((item) => titleCase(pretty(item)));
+}
+
+function slugify(value) {
+  return String(value).trim().replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[._-]+|[._-]+$/g, "") || "chemical";
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function titleCase(value) {
+  return String(value).replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function pretty(value) {
+  return String(value || "").replace(/_/g, " ");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
+
+function setStatus(message) {
+  ui.status.textContent = message;
+}
