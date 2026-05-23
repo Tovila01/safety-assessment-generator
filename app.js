@@ -74,6 +74,7 @@ const STANDARD_TEXT = {
 
 const AI_SETTINGS_STORAGE_KEY = "safety-assessment-generator-ai-settings";
 const FIELD_HISTORY_STORAGE_KEY = "safety-assessment-generator-field-history";
+const WORKBOOK_TEMPLATE_PATH = "./ChemicalRiskAssessment_blank.xlsx";
 const AI_SETTINGS_VERSION = 3;
 const DEFAULT_AI_SETTINGS = {
   version: AI_SETTINGS_VERSION,
@@ -116,6 +117,7 @@ const localAiConfig = (typeof window !== "undefined" && window.SAFETY_ASSESSMENT
   : {};
 let extractedNameDetails = "";
 let latestAssessmentReview = null;
+let workbookTemplateBuffer = null;
 const ASSESSMENT_REVIEW_SYSTEM_PROMPT = [
   "You review completed chemical safety assessments and suggest final corrections.",
   "Your job is not to rewrite everything. Only suggest targeted last-mile fixes if something looks wrong, inconsistent, misspelled, incomplete, or unsupported.",
@@ -633,9 +635,9 @@ function renderAssessment() {
   setStatus("Assessment updated.");
 }
 
-function buildAssessment() {
+async function buildAssessment() {
   renderAssessment();
-  previewWorkbook();
+  await previewWorkbook();
   saveFieldHistory();
   setStatus("Assessment built and workbook preview updated.");
 }
@@ -719,35 +721,40 @@ function buildHazardEntries(row, assessment) {
   return entries.slice(0, 6);
 }
 
-function downloadWorkbook() {
+async function downloadWorkbook() {
   const row = getFormData();
   const assessment = assessRow(row);
   const entries = buildHazardEntries(row, assessment);
   const firstAid = summarizeFirstAid(assessment.hazardTags);
-  const wb = buildWorkbook(row, assessment, entries, firstAid);
+  const wb = await buildWorkbook(row, assessment, entries, firstAid);
   const baseName = slugify(row.name || "chemical");
   return saveWorkbookFile(wb, `${baseName}.xlsx`, row.name || "chemical");
 }
 
-function previewWorkbook() {
+async function previewWorkbook() {
   const row = getFormData();
   const assessment = assessRow(row);
   const entries = buildHazardEntries(row, assessment);
   const firstAid = summarizeFirstAid(assessment.hazardTags);
-  const wb = buildWorkbook(row, assessment, entries, firstAid);
+  const wb = await buildWorkbook(row, assessment, entries, firstAid);
   renderWorkbookPreview(wb, row.name || "chemical");
   setStatus("Workbook preview updated.");
 }
 
-function buildWorkbook(row, assessment, entries, firstAid) {
-  if (window.CHEMICAL_RISK_TEMPLATE_BASE64) {
+async function buildWorkbook(row, assessment, entries, firstAid) {
+  try {
+    await ensureWorkbookTemplateLoaded();
+  } catch (_error) {
+    return buildWorkbookFallback(row, assessment, entries, firstAid);
+  }
+  if (workbookTemplateBuffer) {
     return buildWorkbookFromTemplate(row, assessment, entries, firstAid);
   }
   return buildWorkbookFallback(row, assessment, entries, firstAid);
 }
 
 function buildWorkbookFromTemplate(row, assessment, entries, firstAid) {
-  const wb = XLSX.read(window.CHEMICAL_RISK_TEMPLATE_BASE64, { type: "base64", cellStyles: true });
+  const wb = XLSX.read(workbookTemplateBuffer.slice(0), { type: "array", cellStyles: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const ppe = normalizePpe(assessment.recommendedPpe);
   const setCell = (cell, value, styleSource = cell) => setTemplateCell(ws, cell, value, styleSource);
@@ -1080,11 +1087,26 @@ async function runSafely(action) {
   }
 }
 
-function initializeApp() {
+async function ensureWorkbookTemplateLoaded() {
+  if (workbookTemplateBuffer) return workbookTemplateBuffer;
+  const response = await fetch(WORKBOOK_TEMPLATE_PATH, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Template workbook could not be loaded (${response.status}).`);
+  }
+  workbookTemplateBuffer = await response.arrayBuffer();
+  return workbookTemplateBuffer;
+}
+
+async function initializeApp() {
   updateVersionStamp();
   populateFieldHistoryOptions();
   updateSaveFolderStatus();
   loadAiSettings();
+  try {
+    await ensureWorkbookTemplateLoaded();
+  } catch (_error) {
+    // Fallback workbook generation stays available if the template file cannot be loaded.
+  }
   renderAssessment();
 }
 
