@@ -73,7 +73,9 @@ const STANDARD_TEXT = {
 };
 
 const AI_SETTINGS_STORAGE_KEY = "safety-assessment-generator-ai-settings";
+const AI_SETTINGS_VERSION = 2;
 const DEFAULT_AI_SETTINGS = {
+  version: AI_SETTINGS_VERSION,
   provider: "gemini",
   model: "gemini-3.5-flash",
   apiKey: "",
@@ -543,7 +545,7 @@ function loadAiSettings() {
   let settings = { ...DEFAULT_AI_SETTINGS };
   try {
     const saved = localStorage.getItem(AI_SETTINGS_STORAGE_KEY);
-    if (saved) settings = { ...settings, ...JSON.parse(saved) };
+    if (saved) settings = normalizeAiSettings(JSON.parse(saved));
   } catch (_error) {
     settings = { ...DEFAULT_AI_SETTINGS };
   }
@@ -556,6 +558,7 @@ function loadAiSettings() {
 
 function readAiSettings() {
   return {
+    version: AI_SETTINGS_VERSION,
     provider: aiSettingsForm.provider.value.trim(),
     model: aiSettingsForm.model.value.trim(),
     apiKey: aiSettingsForm.apiKey.value,
@@ -573,4 +576,18 @@ function resetAiSettings() {
   localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(DEFAULT_AI_SETTINGS));
   loadAiSettings();
   setStatus("AI settings reset to defaults.");
+}
+
+function normalizeAiSettings(saved) {
+  const incoming = saved && typeof saved === "object" ? saved : {};
+  if (incoming.version === AI_SETTINGS_VERSION) {
+    return { ...DEFAULT_AI_SETTINGS, ...incoming };
+  }
+  const migrated = {
+    ...DEFAULT_AI_SETTINGS,
+    apiKey: typeof incoming.apiKey === "string" ? incoming.apiKey : DEFAULT_AI_SETTINGS.apiKey,
+    baseUrl: typeof incoming.baseUrl === "string" ? incoming.baseUrl : DEFAULT_AI_SETTINGS.baseUrl,
+  };
+  localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(migrated));
+  return migrated;
 }
