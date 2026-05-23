@@ -72,17 +72,8 @@ const STANDARD_TEXT = {
   },
 };
 
-const LOCATION_OPTIONS = [
-  "A1", "A2", "A3", "A4", "A5",
-  "B2", "B3", "B4",
-  "C3",
-  "D1", "D2", "D3", "D4",
-  "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9",
-  "F2", "F3", "F4", "F6",
-  "G1", "G2", "G4", "G7",
-];
-
 const AI_SETTINGS_STORAGE_KEY = "safety-assessment-generator-ai-settings";
+const FIELD_HISTORY_STORAGE_KEY = "safety-assessment-generator-field-history";
 const AI_SETTINGS_VERSION = 3;
 const DEFAULT_AI_SETTINGS = {
   version: AI_SETTINGS_VERSION,
@@ -136,6 +127,11 @@ const form = {
   peopleCount: document.querySelector("#peopleCount"),
   supervisor: document.querySelector("#supervisor"),
   notes: document.querySelector("#notes"),
+};
+
+const fieldHistoryUi = {
+  assessorOptions: document.querySelector("#assessorOptions"),
+  locationOptions: document.querySelector("#locationOptions"),
 };
 
 const aiSettingsForm = {
@@ -268,6 +264,7 @@ function renderAssessment() {
 function buildAssessment() {
   renderAssessment();
   previewWorkbook();
+  saveFieldHistory();
   setStatus("Assessment built and workbook preview updated.");
 }
 
@@ -579,22 +576,57 @@ async function runSafely(action) {
 
 function initializeApp() {
   updateVersionStamp();
-  populateLocationOptions();
+  populateFieldHistoryOptions();
   updateSaveFolderStatus();
   loadAiSettings();
   renderAssessment();
 }
 
-function populateLocationOptions() {
-  const currentValue = form.location.value;
-  form.location.innerHTML = '<option value="">Select location</option>';
-  for (const location of LOCATION_OPTIONS) {
+function populateFieldHistoryOptions() {
+  const history = loadFieldHistory();
+  renderDatalist(fieldHistoryUi.assessorOptions, history.assessor || []);
+  renderDatalist(fieldHistoryUi.locationOptions, history.location || []);
+}
+
+function renderDatalist(element, values) {
+  element.innerHTML = "";
+  for (const value of values) {
     const option = document.createElement("option");
-    option.value = location;
-    option.textContent = location;
-    if (location === currentValue) option.selected = true;
-    form.location.appendChild(option);
+    option.value = value;
+    element.appendChild(option);
   }
+}
+
+function loadFieldHistory() {
+  try {
+    const saved = localStorage.getItem(FIELD_HISTORY_STORAGE_KEY);
+    if (!saved) return { assessor: [], location: [] };
+    const parsed = JSON.parse(saved);
+    return {
+      assessor: Array.isArray(parsed?.assessor) ? parsed.assessor.filter(Boolean) : [],
+      location: Array.isArray(parsed?.location) ? parsed.location.filter(Boolean) : [],
+    };
+  } catch (_error) {
+    return { assessor: [], location: [] };
+  }
+}
+
+function saveFieldHistory() {
+  const history = loadFieldHistory();
+  const next = {
+    assessor: mergeHistory(history.assessor, form.assessor.value),
+    location: mergeHistory(history.location, form.location.value),
+  };
+  localStorage.setItem(FIELD_HISTORY_STORAGE_KEY, JSON.stringify(next));
+  renderDatalist(fieldHistoryUi.assessorOptions, next.assessor);
+  renderDatalist(fieldHistoryUi.locationOptions, next.location);
+}
+
+function mergeHistory(existing, value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return existing;
+  const merged = [normalized, ...existing.filter((item) => item !== normalized)];
+  return merged.slice(0, 20);
 }
 
 async function chooseSaveFolder() {
