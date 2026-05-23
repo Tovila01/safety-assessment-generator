@@ -108,6 +108,7 @@ const DEFAULT_AI_SETTINGS = {
     "Return valid JSON only.",
   ].join("\n"),
 };
+let localAiConfig = {};
 
 const form = {
   pdfFile: document.querySelector("#pdfFile"),
@@ -157,8 +158,7 @@ aiSettingsForm.saveButton.addEventListener("click", saveAiSettings);
 aiSettingsForm.resetButton.addEventListener("click", resetAiSettings);
 
 form.date.value = new Date().toLocaleDateString("en-GB").replace(/\//g, "/");
-loadAiSettings();
-renderAssessment();
+await initializeApp();
 
 async function extractFromPdf() {
   const file = form.pdfFile.files?.[0];
@@ -541,13 +541,40 @@ function setStatus(message) {
   ui.status.textContent = message;
 }
 
+async function initializeApp() {
+  localAiConfig = await loadLocalAiConfig();
+  loadAiSettings();
+  renderAssessment();
+}
+
+async function loadLocalAiConfig() {
+  try {
+    const response = await fetch("./config.local.json", { cache: "no-store" });
+    if (!response.ok) return {};
+    const parsed = await response.json();
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function getEffectiveDefaultAiSettings() {
+  return {
+    ...DEFAULT_AI_SETTINGS,
+    provider: typeof localAiConfig.provider === "string" && localAiConfig.provider.trim() ? localAiConfig.provider.trim() : DEFAULT_AI_SETTINGS.provider,
+    model: typeof localAiConfig.model === "string" && localAiConfig.model.trim() ? localAiConfig.model.trim() : DEFAULT_AI_SETTINGS.model,
+    apiKey: typeof localAiConfig.apiKey === "string" ? localAiConfig.apiKey : DEFAULT_AI_SETTINGS.apiKey,
+    baseUrl: typeof localAiConfig.baseUrl === "string" ? localAiConfig.baseUrl : DEFAULT_AI_SETTINGS.baseUrl,
+  };
+}
+
 function loadAiSettings() {
-  let settings = { ...DEFAULT_AI_SETTINGS };
+  let settings = getEffectiveDefaultAiSettings();
   try {
     const saved = localStorage.getItem(AI_SETTINGS_STORAGE_KEY);
     if (saved) settings = normalizeAiSettings(JSON.parse(saved));
   } catch (_error) {
-    settings = { ...DEFAULT_AI_SETTINGS };
+    settings = getEffectiveDefaultAiSettings();
   }
   aiSettingsForm.provider.value = settings.provider;
   aiSettingsForm.model.value = settings.model;
@@ -573,17 +600,18 @@ function saveAiSettings() {
 }
 
 function resetAiSettings() {
-  localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(DEFAULT_AI_SETTINGS));
+  localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(getEffectiveDefaultAiSettings()));
   loadAiSettings();
   setStatus("AI settings reset to defaults.");
 }
 
 function normalizeAiSettings(saved) {
   const incoming = saved && typeof saved === "object" ? saved : {};
+  const effectiveDefaults = getEffectiveDefaultAiSettings();
   const migrated = {
-    ...DEFAULT_AI_SETTINGS,
-    apiKey: typeof incoming.apiKey === "string" ? incoming.apiKey : DEFAULT_AI_SETTINGS.apiKey,
-    baseUrl: typeof incoming.baseUrl === "string" ? incoming.baseUrl : DEFAULT_AI_SETTINGS.baseUrl,
+    ...effectiveDefaults,
+    apiKey: typeof incoming.apiKey === "string" ? incoming.apiKey : effectiveDefaults.apiKey,
+    baseUrl: typeof incoming.baseUrl === "string" ? incoming.baseUrl : effectiveDefaults.baseUrl,
   };
   localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(migrated));
   return migrated;

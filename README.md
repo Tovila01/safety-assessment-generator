@@ -16,6 +16,7 @@ This repository is a standalone HTML/JavaScript version of the chemical risk ass
 - canonical chemical naming for form fields and downloaded files
 - Excel workbook export aligned more closely to the Python form layout
 - in-browser preview of the generated workbook layout
+- optional local-only `config.local.json` support for machine-specific AI defaults like API key/base URL without committing secrets
 
 ## How to use
 

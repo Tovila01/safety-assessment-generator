@@ -2,3 +2,4 @@
 *.xls
 *.pdf
 dist/
+config.local.json
