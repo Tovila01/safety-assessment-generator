@@ -227,6 +227,36 @@ select {
   margin-bottom: 10px;
 }
 
+.manual-risk-panel {
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid rgba(138, 59, 18, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdf8 0%, #fbf5eb 100%);
+}
+
+.manual-risk-header {
+  margin-bottom: 12px;
+}
+
+.manual-risk-toggle {
+  margin-bottom: 14px;
+}
+
+.manual-risk-toggle input {
+  width: auto;
+}
+
+.manual-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.manual-risk-grid small {
+  color: var(--muted);
+}
+
 .method-list {
   margin: 12px 0 0;
   padding-left: 18px;
@@ -342,7 +372,8 @@ th {
   .grid,
   .summary,
   .detail-grid,
-  .method-grid {
+  .method-grid,
+  .manual-risk-grid {
     grid-template-columns: 1fr;
   }
 

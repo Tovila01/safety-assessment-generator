@@ -185,6 +185,46 @@ Return valid JSON only.</textarea>
           </article>
         </div>
 
+        <div class="manual-risk-panel">
+          <div class="panel-header manual-risk-header">
+            <h3>Manual Risk Override</h3>
+            <p>Use your own reasoning to assess hazard, severity, and probability.</p>
+          </div>
+
+          <label class="manual-risk-toggle">
+            <span>Use manual risk rating</span>
+            <input id="manualRiskEnabled" type="checkbox" />
+          </label>
+
+          <div class="manual-risk-grid">
+            <label>
+              <span>Hazard score (0 to 4)</span>
+              <input id="manualHazardScore" type="range" min="0" max="4" step="1" value="2" />
+              <small id="manualHazardDisplay">2 - Moderate hazard</small>
+            </label>
+            <label>
+              <span>Severity</span>
+              <select id="manualSeverity">
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+            <label>
+              <span>Probability</span>
+              <select id="manualProbability">
+                <option value="unlikely">Unlikely</option>
+                <option value="likely" selected>Likely</option>
+                <option value="highly_likely">Highly likely</option>
+              </select>
+            </label>
+          </div>
+
+          <p id="manualRiskSummary" class="method-note">
+            Manual matrix score: 4. Manual risk level: Medium.
+          </p>
+        </div>
+
         <div class="table-wrap">
           <table>
             <thead>

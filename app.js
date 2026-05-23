@@ -127,6 +127,10 @@ const form = {
   peopleCount: document.querySelector("#peopleCount"),
   supervisor: document.querySelector("#supervisor"),
   notes: document.querySelector("#notes"),
+  manualRiskEnabled: document.querySelector("#manualRiskEnabled"),
+  manualHazardScore: document.querySelector("#manualHazardScore"),
+  manualSeverity: document.querySelector("#manualSeverity"),
+  manualProbability: document.querySelector("#manualProbability"),
 };
 
 const fieldHistoryUi = {
@@ -158,6 +162,8 @@ const ui = {
   firstAidList: document.querySelector("#firstAidList"),
   workbookPreview: document.querySelector("#workbookPreview"),
   workbookPreviewMeta: document.querySelector("#workbookPreviewMeta"),
+  manualHazardDisplay: document.querySelector("#manualHazardDisplay"),
+  manualRiskSummary: document.querySelector("#manualRiskSummary"),
 };
 
 let saveDirectoryHandle = null;
@@ -169,6 +175,10 @@ document.querySelector("#previewWorkbookButton").addEventListener("click", () =>
 document.querySelector("#downloadButton").addEventListener("click", () => runSafely(downloadWorkbook));
 aiSettingsForm.saveButton.addEventListener("click", saveAiSettings);
 aiSettingsForm.resetButton.addEventListener("click", resetAiSettings);
+form.manualRiskEnabled.addEventListener("change", renderAssessment);
+form.manualSeverity.addEventListener("change", renderAssessment);
+form.manualProbability.addEventListener("change", renderAssessment);
+form.manualHazardScore.addEventListener("input", renderAssessment);
 
 form.date.value = new Date().toLocaleDateString("en-GB").replace(/\//g, "/");
 initializeApp();
@@ -476,6 +486,7 @@ function renderAssessment() {
 
   const firstAid = summarizeFirstAid(assessment.hazardTags);
   ui.firstAidList.innerHTML = Object.values(firstAid).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  updateManualRiskUi(assessment.manualRisk);
   setStatus("Assessment updated.");
 }
 
@@ -500,6 +511,10 @@ function getFormData() {
     peopleCount: form.peopleCount.value.trim() || "1",
     supervisor: form.supervisor.value.trim(),
     notes: form.notes.value.trim(),
+    manualRiskEnabled: form.manualRiskEnabled.checked,
+    manualHazardScore: Number(form.manualHazardScore.value),
+    manualSeverity: form.manualSeverity.value.trim(),
+    manualProbability: form.manualProbability.value.trim(),
   };
 }
 
@@ -512,15 +527,17 @@ function assessRow(row) {
   const engineeringControls = unique(matched.flatMap((rule) => rule.controls || []));
   const storageFlags = unique(matched.flatMap((rule) => rule.storage || []));
   const wasteFlags = unique(matched.flatMap((rule) => rule.waste || []));
+  const manualRisk = assessManualRisk(row);
   return {
     codes,
-    severity,
-    riskBand: riskBand(severity),
+    severity: manualRisk.enabled ? manualRisk.effectiveSeverity : severity,
+    riskBand: manualRisk.enabled ? manualRisk.riskBand : riskBand(severity),
     hazardTags,
     recommendedPpe,
     engineeringControls,
     storageFlags,
     wasteFlags,
+    manualRisk,
   };
 }
 
@@ -690,6 +707,46 @@ function summarizeHazardsFromCodes(codes) {
   if (codes.includes("H319")) parts.push("Causes serious eye irritation.");
   if (codes.includes("H336")) parts.push("May cause drowsiness or dizziness.");
   return parts.join(" ");
+}
+
+function assessManualRisk(row) {
+  const hazardScore = Number.isFinite(row.manualHazardScore) ? row.manualHazardScore : 2;
+  const severityWeights = { low: 1, medium: 2, high: 4 };
+  const probabilityWeights = { unlikely: 1, likely: 2, highly_likely: 4 };
+  const severityWeight = severityWeights[row.manualSeverity] || 2;
+  const probabilityWeight = probabilityWeights[row.manualProbability] || 2;
+  const matrixScore = severityWeight * probabilityWeight;
+  let riskBand = "low";
+  if (matrixScore >= 8) riskBand = "high";
+  else if (matrixScore >= 3) riskBand = "medium";
+  const effectiveSeverity = riskBand === "high" ? 4 : (riskBand === "medium" ? 3 : 2);
+  return {
+    enabled: Boolean(row.manualRiskEnabled),
+    hazardScore,
+    hazardLabel: hazardScoreLabel(hazardScore),
+    severity: row.manualSeverity || "medium",
+    probability: row.manualProbability || "likely",
+    matrixScore,
+    riskBand,
+    effectiveSeverity,
+  };
+}
+
+function hazardScoreLabel(score) {
+  const labels = {
+    0: "Minimal hazard",
+    1: "Slight hazard",
+    2: "Moderate hazard",
+    3: "Serious hazard",
+    4: "Extreme or severe danger",
+  };
+  return labels[score] || "Moderate hazard";
+}
+
+function updateManualRiskUi(manualRisk) {
+  if (!manualRisk) return;
+  ui.manualHazardDisplay.textContent = `${manualRisk.hazardScore} - ${manualRisk.hazardLabel}`;
+  ui.manualRiskSummary.textContent = `Manual matrix score: ${manualRisk.matrixScore}. Manual risk level: ${titleCase(manualRisk.riskBand)}.${manualRisk.enabled ? " Manual override is active." : " Automatic H-code-based rating is active."}`;
 }
 
 function riskBand(severity) {
