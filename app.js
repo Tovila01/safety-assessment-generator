@@ -60,6 +60,48 @@ const HAZARD_LIBRARY = {
   aquatic_toxicity: { hazard: "Environmental hazard", risk: "Environmental release", controls: ["Prevent release to drains."] },
 };
 
+const HAZARD_STATEMENTS = {
+  H225: "Highly flammable liquid and vapour.",
+  H290: "May be corrosive to metals.",
+  H300: "Fatal if swallowed.",
+  H301: "Toxic if swallowed.",
+  H302: "Harmful if swallowed.",
+  H314: "Causes severe skin burns and eye damage.",
+  H315: "Causes skin irritation.",
+  H317: "May cause an allergic skin reaction.",
+  H319: "Causes serious eye irritation.",
+  H332: "Harmful if inhaled.",
+  H335: "May cause respiratory irritation.",
+  H336: "May cause drowsiness or dizziness.",
+  H340: "May cause genetic defects.",
+  H350: "May cause cancer.",
+  H351: "Suspected of causing cancer.",
+  H360: "May damage fertility or the unborn child.",
+  H361FD: "Suspected of damaging fertility. Suspected of damaging the unborn child.",
+  H372: "Causes damage to organs through prolonged or repeated exposure.",
+  H410: "Very toxic to aquatic life with long lasting effects.",
+};
+
+const TAG_RISK_CODE_PRIORITY = {
+  flammable: ["H225"],
+  acute_toxicity_oral: ["H300", "H301", "H302"],
+  toxic_if_swallowed: ["H301", "H302"],
+  harmful_if_swallowed: ["H302"],
+  harmful_if_inhaled: ["H332"],
+  corrosive: ["H314"],
+  skin_irritant: ["H315"],
+  skin_sensitizer: ["H317"],
+  eye_irritant: ["H319"],
+  respiratory_irritant: ["H335"],
+  narcotic_effects: ["H336"],
+  mutagenicity: ["H340"],
+  carcinogen: ["H350"],
+  suspected_carcinogen: ["H351"],
+  reproductive_toxicity: ["H360", "H361FD"],
+  organ_toxicity_repeated: ["H372"],
+  aquatic_toxicity: ["H410"],
+};
+
 const STANDARD_TEXT = {
   fire: {
     flammable: "Use water spray, alcohol-resistant foam, dry chemical or carbon dioxide. Do not use water jetstream.",
@@ -906,12 +948,13 @@ function buildHazardEntries(row, assessment) {
   const entries = [];
   const primaryTag = tags[0] || "";
   const primaryTemplate = HAZARD_LIBRARY[primaryTag] || null;
-  const defaultUseRisk = primaryRiskText(tags) || "Exposure during handling";
+  const defaultUseRisk = buildRiskTextFromCodes(assessment.codes, 3) || primaryRiskText(tags) || "Hazardous chemical exposure.";
+  const defaultUseControls = buildGenericUseControls(tags, assessment.engineeringControls);
 
   entries.push({
     area: "Storage",
     hazard: primaryTemplate?.hazard || "Chemical hazard",
-    risk: primaryRiskText(tags) || "Storage incompatibility or exposure",
+    risk: buildRiskTextForTag(primaryTag, assessment.codes) || buildRiskTextFromCodes(assessment.codes, 2) || "Storage incompatibility or exposure.",
     controls: summarizeStorage(tags, assessment.storageFlags),
     rating: band,
   });
@@ -920,16 +963,16 @@ function buildHazardEntries(row, assessment) {
     area: "Use",
     hazard: primaryTemplate?.hazard || "Handling exposure",
     risk: primaryTemplate?.risk || defaultUseRisk,
-    controls: primaryTemplate?.controls?.join("\n") || "Review SDS before use.",
+    controls: primaryTemplate?.controls?.join("\n") || defaultUseControls,
     rating: band,
   });
 
   for (const tag of tags.slice(1)) {
-    const template = HAZARD_LIBRARY[tag] || { hazard: "Handling exposure", risk: defaultUseRisk, controls: ["Review SDS before use."] };
+    const template = HAZARD_LIBRARY[tag] || { hazard: "Handling exposure", risk: defaultUseRisk, controls: [defaultUseControls] };
     entries.push({
       area: "",
       hazard: template.hazard,
-      risk: template.risk,
+      risk: buildRiskTextForTag(tag, assessment.codes) || template.risk,
       controls: template.controls.join("\n"),
       rating: band,
     });
@@ -938,7 +981,7 @@ function buildHazardEntries(row, assessment) {
   entries.push({
     area: "Waste",
     hazard: primaryTemplate?.hazard || "Hazardous waste",
-    risk: primaryRiskText(tags) || "Exposure or environmental release",
+    risk: buildRiskTextFromCodes(assessment.codes, 2) || primaryRiskText(tags) || "Exposure or environmental release.",
     controls: summarizeDisposal(tags, assessment.wasteFlags),
     rating: band,
   });
@@ -1245,6 +1288,48 @@ function primaryRiskText(tags) {
     if (HAZARD_LIBRARY[tag]?.risk) return HAZARD_LIBRARY[tag].risk;
   }
   return "";
+}
+
+function buildRiskTextForTag(tag, codes) {
+  const preferredCodes = TAG_RISK_CODE_PRIORITY[tag] || [];
+  const statements = preferredCodes
+    .filter((code) => codes.includes(code))
+    .map((code) => HAZARD_STATEMENTS[code])
+    .filter(Boolean);
+  if (statements.length) return statements.join(" ");
+  return "";
+}
+
+function buildRiskTextFromCodes(codes, limit = 3) {
+  const statements = codes
+    .map((code) => HAZARD_STATEMENTS[code])
+    .filter(Boolean)
+    .slice(0, limit);
+  return statements.join(" ");
+}
+
+function buildGenericUseControls(tags, engineeringControls) {
+  const lines = [];
+  if (engineeringControls.includes("use_fume_hood") || tags.includes("harmful_if_inhaled") || tags.includes("respiratory_irritant") || tags.includes("mutagenicity") || tags.includes("carcinogen")) {
+    lines.push("Use in a fume hood.");
+  }
+  if (tags.includes("skin_irritant") || tags.includes("skin_sensitizer") || tags.includes("reproductive_toxicity") || tags.includes("corrosive")) {
+    lines.push("Avoid skin contact.");
+  }
+  if (tags.includes("harmful_if_inhaled") || tags.includes("respiratory_irritant")) {
+    lines.push("Avoid breathing vapours, aerosols, or dust.");
+  }
+  if (tags.includes("acute_toxicity_oral") || tags.includes("toxic_if_swallowed") || tags.includes("harmful_if_swallowed")) {
+    lines.push("Avoid ingestion and wash hands after handling.");
+  }
+  if (tags.includes("mutagenicity") || tags.includes("carcinogen") || tags.includes("organ_toxicity_repeated")) {
+    lines.push("Minimize exposure and restrict handling to trained users.");
+  }
+  if (!lines.length) {
+    lines.push("Use appropriate personal protective equipment.");
+    lines.push("Avoid direct exposure during handling.");
+  }
+  return unique(lines).join("\n");
 }
 
 function summarizeStorage(tags, storageFlags) {
