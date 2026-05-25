@@ -105,7 +105,36 @@ const AI_SETTINGS_STORAGE_KEY = "safety-assessment-generator-ai-settings";
 const FIELD_HISTORY_STORAGE_KEY = "safety-assessment-generator-field-history";
 const EXTRACTION_MODE_STORAGE_KEY = "safety-assessment-generator-extraction-mode";
 const WORKBOOK_TEMPLATE_PATH = "./ChemicalRiskAssessment_blank.xlsx";
-const AI_SETTINGS_VERSION = 3;
+const AI_SETTINGS_VERSION = 4;
+const LEGACY_DEFAULT_SYSTEM_PROMPT = [
+  "You extract structured chemical safety information from SDS or fact-sheet text.",
+  "Your task is to extract structured information only from the provided source document text.",
+  "The source document is typically a safety data sheet (SDS), fact sheet, or official chemical safety document.",
+  "",
+  "Primary objective:",
+  "Maximize reproducibility, conservatism, and traceability.",
+  "Do not guess. Do not infer beyond what is explicitly supported by the text.",
+  "If information is missing, uncertain, contradictory, or not clearly stated, leave the field empty and report it in missing_fields or warnings.",
+  "",
+  "Rules:",
+  "1. Use only the provided document text as the source of truth.",
+  "2. Do not use outside knowledge.",
+  "3. Do not invent H-codes, CAS numbers, PPE, storage rules, disposal rules, or first-aid instructions.",
+  "4. Prefer exact extraction over paraphrase when possible.",
+  "5. If multiple values appear, prefer the most explicit and document-supported one, and mention ambiguity in warnings.",
+  "6. If a field is not explicitly supported, return an empty value for that field.",
+  "7. Keep all outputs deterministic, concise, and machine-readable.",
+  "8. Do not produce prose outside the requested JSON schema.",
+  "9. If the document is low quality, incomplete, OCR-corrupted, or inconsistent, lower confidence accordingly.",
+  "10. Only include hazard statements / H-codes that are explicitly present in the text.",
+  "11. Keep notes, storage, spill, first_aid, firefighting, disposal, and PPE concise and operational. Prefer compact summaries over long quoted passages.",
+  "12. For the name field, return only the base chemical name. Exclude concentration, purity, grade, technical descriptors, percentages, bracketed qualifiers, catalogue numbers, product codes, and formulation details.",
+  "13. Put stripped descriptors such as grade, technical condition, particle form, or other qualifiers into `nameDetails` instead of the `name` field.",
+  "Examples: return `Ethanol`, not `Ethanol 69%`; return `Acetone`, not `Acetone technical`; return `Hydrochloric acid`, not `Hydrochloric acid 37%`.",
+  "Example: for `Calcium chloride, fused, granular`, return `Calcium chloride` as `name` and `fused, granular` as `nameDetails`.",
+  "",
+  "Return valid JSON only.",
+].join("\n");
 const DEFAULT_AI_SETTINGS = {
   version: AI_SETTINGS_VERSION,
   provider: "gemini",
@@ -113,31 +142,25 @@ const DEFAULT_AI_SETTINGS = {
   apiKey: "",
   baseUrl: "",
   systemPrompt: [
-    "You extract structured chemical safety information from SDS or fact-sheet text.",
-    "Your task is to extract structured information only from the provided source document text.",
-    "The source document is typically a safety data sheet (SDS), fact sheet, or official chemical safety document.",
+    "You extract structured chemical safety information from source documents.",
+    "Use only the provided text as evidence.",
     "",
     "Primary objective:",
-    "Maximize reproducibility, conservatism, and traceability.",
-    "Do not guess. Do not infer beyond what is explicitly supported by the text.",
-    "If information is missing, uncertain, contradictory, or not clearly stated, leave the field empty and report it in missing_fields or warnings.",
+    "Produce conservative, reproducible, machine-readable extraction with no unsupported assumptions.",
     "",
     "Rules:",
-    "1. Use only the provided document text as the source of truth.",
+    "1. Treat the provided document text as the only source of truth.",
     "2. Do not use outside knowledge.",
-    "3. Do not invent H-codes, CAS numbers, PPE, storage rules, disposal rules, or first-aid instructions.",
-    "4. Prefer exact extraction over paraphrase when possible.",
-    "5. If multiple values appear, prefer the most explicit and document-supported one, and mention ambiguity in warnings.",
-    "6. If a field is not explicitly supported, return an empty value for that field.",
-    "7. Keep all outputs deterministic, concise, and machine-readable.",
-    "8. Do not produce prose outside the requested JSON schema.",
-    "9. If the document is low quality, incomplete, OCR-corrupted, or inconsistent, lower confidence accordingly.",
-    "10. Only include hazard statements / H-codes that are explicitly present in the text.",
-    "11. Keep notes, storage, spill, first_aid, firefighting, disposal, and PPE concise and operational. Prefer compact summaries over long quoted passages.",
-    "12. For the name field, return only the base chemical name. Exclude concentration, purity, grade, technical descriptors, percentages, bracketed qualifiers, catalogue numbers, product codes, and formulation details.",
-    "13. Put stripped descriptors such as grade, technical condition, particle form, or other qualifiers into `nameDetails` instead of the `name` field.",
-    "Examples: return `Ethanol`, not `Ethanol 69%`; return `Acetone`, not `Acetone technical`; return `Hydrochloric acid`, not `Hydrochloric acid 37%`.",
-    "Example: for `Calcium chloride, fused, granular`, return `Calcium chloride` as `name` and `fused, granular` as `nameDetails`.",
+    "3. Do not invent values, classifications, identifiers, controls, or instructions.",
+    "4. Prefer direct extraction over interpretation.",
+    "5. If a field is missing, unclear, contradictory, or not explicitly supported, leave it empty and report that uncertainty.",
+    "6. If multiple candidate values appear, choose the most explicit document-supported value and mention ambiguity in warnings.",
+    "7. Keep outputs concise, deterministic, and operational.",
+    "8. Do not output prose outside the requested JSON schema.",
+    "9. Keep hazard codes, statements, first aid, handling, storage, disposal, and PPE aligned to what is explicitly present in the source.",
+    "10. Normalize the chemical name to the core name only, while moving supporting qualifiers or descriptors into separate detail fields when available.",
+    "11. Preserve relevant hazard code suffixes and combined classifications exactly when they are present in the source.",
+    "12. Lower confidence when the source appears incomplete, low quality, OCR-corrupted, or internally inconsistent.",
     "",
     "Return valid JSON only.",
   ].join("\n"),
@@ -1497,10 +1520,18 @@ function resetAiSettings() {
 function normalizeAiSettings(saved) {
   const incoming = saved && typeof saved === "object" ? saved : {};
   const effectiveDefaults = getEffectiveDefaultAiSettings();
+  const incomingPrompt = typeof incoming.systemPrompt === "string" ? incoming.systemPrompt.trim() : "";
+  const shouldRefreshPrompt = !incomingPrompt
+    || incomingPrompt === LEGACY_DEFAULT_SYSTEM_PROMPT
+    || Number(incoming.version || 0) < AI_SETTINGS_VERSION;
   const migrated = {
     ...effectiveDefaults,
+    version: AI_SETTINGS_VERSION,
     apiKey: typeof incoming.apiKey === "string" && incoming.apiKey.trim() ? incoming.apiKey : effectiveDefaults.apiKey,
     baseUrl: typeof incoming.baseUrl === "string" ? incoming.baseUrl : effectiveDefaults.baseUrl,
+    provider: typeof incoming.provider === "string" && incoming.provider.trim() ? incoming.provider : effectiveDefaults.provider,
+    model: typeof incoming.model === "string" && incoming.model.trim() ? incoming.model : effectiveDefaults.model,
+    systemPrompt: shouldRefreshPrompt ? effectiveDefaults.systemPrompt : incomingPrompt,
   };
   localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(migrated));
   return migrated;
