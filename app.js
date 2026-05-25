@@ -490,9 +490,13 @@ async function reviewAssessment() {
   const row = getFormData();
   const assessment = assessRow(row);
   const entries = buildHazardEntries(row, assessment);
+  const firstAid = summarizeFirstAid(assessment.hazardTags);
+  const workbook = await buildWorkbook(row, assessment, entries, firstAid);
+  const workbookReviewData = serializeWorkbookForReview(workbook);
   const prompt = [
     "Review this completed chemical safety assessment.",
-    "Check whether the extracted fields, wording, and resulting assessment look right.",
+    "Check whether the extracted fields, wording, resulting assessment, and generated workbook content look right.",
+    "Base your reasoning on the workbook output, not only on the intermediate assessment summary.",
     "Suggest only final targeted changes that should be applied.",
     "Return strict JSON with this schema only:",
     "{",
@@ -513,6 +517,8 @@ async function reviewAssessment() {
       wasteFlags: assessment.wasteFlags,
       entries,
     }, null, 2)}`,
+    "",
+    `Generated workbook content:\n${JSON.stringify(workbookReviewData, null, 2)}`,
   ].join("\n");
 
   setStatus("Reviewing assessment with AI...");
@@ -604,6 +610,45 @@ function setReviewRunningState(isRunning) {
   ui.reviewStatus.classList.toggle("running", Boolean(isRunning));
   ui.reviewAssessmentButton.disabled = Boolean(isRunning);
   ui.reviewAssessmentButton.textContent = isRunning ? "Reviewing..." : "Review Assessment";
+}
+
+function serializeWorkbookForReview(workbook) {
+  const sheetName = workbook?.SheetNames?.[0];
+  const ws = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!sheetName || !ws) {
+    return { sheetName: "", range: "", filledCells: [], rows: [] };
+  }
+  const range = ws["!ref"] || "A1";
+  const matrix = XLSX.utils.sheet_to_json(ws, {
+    header: 1,
+    raw: false,
+    blankrows: true,
+    defval: "",
+  });
+  const filledCells = [];
+  for (const [address, cell] of Object.entries(ws)) {
+    if (address.startsWith("!")) continue;
+    const value = normalizeFlatString(cell?.w ?? cell?.v ?? "");
+    if (!value) continue;
+    filledCells.push({ cell: address, value });
+  }
+  filledCells.sort((a, b) => compareCellAddresses(a.cell, b.cell));
+  return {
+    sheetName,
+    range,
+    filledCells,
+    rows: matrix.map((row, index) => ({
+      rowNumber: index + 1,
+      values: Array.isArray(row) ? row.map((value) => normalizeFlatString(value)) : [],
+    })),
+  };
+}
+
+function compareCellAddresses(left, right) {
+  const leftCell = XLSX.utils.decode_cell(left);
+  const rightCell = XLSX.utils.decode_cell(right);
+  if (leftCell.r !== rightCell.r) return leftCell.r - rightCell.r;
+  return leftCell.c - rightCell.c;
 }
 
 function parseSdsText(text) {
