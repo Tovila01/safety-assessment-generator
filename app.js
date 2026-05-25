@@ -830,11 +830,9 @@ function clearAssessment() {
   form.ghsCodes.value = "";
   form.physicalForm.value = "";
   form.concentration.value = "";
-  form.assessor.value = "";
   form.location.value = "";
   form.date.value = new Date().toLocaleDateString("en-GB").replace(/\//g, "/");
   form.peopleCount.value = "";
-  form.supervisor.value = "";
   form.notes.value = "";
   form.manualRiskEnabled.checked = false;
   form.manualHazardScore.value = "2";
