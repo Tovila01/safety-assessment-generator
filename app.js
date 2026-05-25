@@ -497,6 +497,8 @@ async function reviewAssessment() {
     "Review this completed chemical safety assessment.",
     "Check whether the extracted fields, wording, resulting assessment, and generated workbook content look right.",
     "Base your reasoning on the workbook output, not only on the intermediate assessment summary.",
+    "Do not report GHS nomenclature as missing if GHS / H-codes are present anywhere in the workbook, including combined summary fields such as the bottom 'Other Information' section.",
+    "In this workbook, GHS information may appear bundled together with CAS and name details instead of in a separate dedicated GHS row.",
     "Suggest only final targeted changes that should be applied.",
     "Return strict JSON with this schema only:",
     "{",
@@ -616,7 +618,7 @@ function serializeWorkbookForReview(workbook) {
   const sheetName = workbook?.SheetNames?.[0];
   const ws = sheetName ? workbook.Sheets[sheetName] : null;
   if (!sheetName || !ws) {
-    return { sheetName: "", range: "", filledCells: [], rows: [] };
+    return { sheetName: "", range: "", keyCells: {}, filledCells: [], rows: [] };
   }
   const range = ws["!ref"] || "A1";
   const matrix = XLSX.utils.sheet_to_json(ws, {
@@ -633,9 +635,23 @@ function serializeWorkbookForReview(workbook) {
     filledCells.push({ cell: address, value });
   }
   filledCells.sort((a, b) => compareCellAddresses(a.cell, b.cell));
+  const keyCellAddresses = [
+    "C3", "F3", "C5", "F5", "C6",
+    "A9", "B9", "C9", "D9", "F9",
+    "A10", "B10", "C10", "D10", "F10",
+    "A11", "B11", "C11", "D11", "F11",
+    "A12", "B12", "C12", "D12", "F12",
+    "A13", "B13", "C13", "D13", "F13",
+    "A14", "B14", "C14", "D14", "F14",
+    "C19", "C27", "C28", "C31", "C32", "C33", "C34", "C35", "C36", "C37", "C40", "C44", "F44",
+  ];
+  const keyCells = Object.fromEntries(
+    keyCellAddresses.map((address) => [address, normalizeFlatString(ws[address]?.w ?? ws[address]?.v ?? "")])
+  );
   return {
     sheetName,
     range,
+    keyCells,
     filledCells,
     rows: matrix.map((row, index) => ({
       rowNumber: index + 1,
