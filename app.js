@@ -232,6 +232,8 @@ const localAiConfig = (typeof window !== "undefined" && window.SAFETY_ASSESSMENT
   : {};
 let extractedNameDetails = "";
 let latestAssessmentReview = null;
+let latestAssessmentPayload = null;
+let latestAssessmentSignature = "";
 let workbookTemplateBuffer = null;
 const ASSESSMENT_REVIEW_SYSTEM_PROMPT = [
   "You review completed chemical safety assessments and suggest final corrections.",
@@ -239,6 +241,16 @@ const ASSESSMENT_REVIEW_SYSTEM_PROMPT = [
   "Use the assessment data and hazard summary provided. Be conservative and concise.",
   "Do not invent new hazard codes or unsupported facts.",
   "If the assessment already looks acceptable, return no changes.",
+  "Return valid JSON only.",
+].join("\n");
+const ASSESSMENT_BUILD_SYSTEM_PROMPT = [
+  "You generate structured chemical risk assessment content from provided chemical and safety data.",
+  "Use only the provided data.",
+  "Return a complete, conservative, machine-readable JSON assessment.",
+  "Do not add unsupported facts.",
+  "Keep risk text aligned to explicit hazard statements when available.",
+  "Keep controls concise, operational, and relevant to the hazard profile.",
+  "Always include storage, use, and waste coverage.",
   "Return valid JSON only.",
 ].join("\n");
 
@@ -599,9 +611,8 @@ async function reviewAssessment() {
     return;
   }
   const row = getFormData();
-  const assessment = assessRow(row);
-  const entries = buildHazardEntries(row, assessment);
-  const firstAid = summarizeFirstAid(assessment.hazardTags);
+  const resolved = await resolveAssessmentPayload(row, { preferAi: true });
+  const { assessment, entries, firstAid } = resolved.payload;
   const workbook = await buildWorkbook(row, assessment, entries, firstAid);
   const workbookReviewData = serializeWorkbookForReview(workbook);
   const prompt = [
@@ -857,37 +868,18 @@ function handleManualNameEdit() {
 
 function renderAssessment() {
   const row = getFormData();
-  const assessment = assessRow(row);
-  const entries = buildHazardEntries(row, assessment);
-
-  ui.riskRating.textContent = titleCase(assessment.riskBand);
-  ui.hazardTags.textContent = assessment.hazardTags.length ? assessment.hazardTags.map(pretty).join(", ") : "-";
-  ui.ppeSummary.textContent = normalizePpe(assessment.recommendedPpe).join(", ");
-  ui.hazardTableBody.innerHTML = entries.map((entry) => `
-    <tr>
-      <td>${escapeHtml(entry.area)}</td>
-      <td>${escapeHtml(entry.hazard)}</td>
-      <td>${escapeHtml(entry.risk)}</td>
-      <td>${escapeHtml(entry.controls).replace(/\n/g, "<br>")}</td>
-      <td>${escapeHtml(entry.rating)}</td>
-    </tr>
-  `).join("");
-
-  ui.fireText.textContent = summarizeFirefighting(assessment.hazardTags);
-  ui.spillPrecautions.textContent = summarizeSpillPrecautions(assessment.hazardTags, assessment.engineeringControls).replace(/\n/g, " ");
-  ui.spillCleanup.textContent = summarizeSpillCleanup(assessment.hazardTags, assessment.wasteFlags).replace(/\n/g, " ");
-
-  const firstAid = summarizeFirstAid(assessment.hazardTags);
-  ui.firstAidList.innerHTML = Object.values(firstAid).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-  updateManualRiskUi(assessment.manualRisk);
+  const payload = buildDeterministicAssessmentPayload(row);
+  renderAssessmentPayload(payload);
   setStatus("Assessment updated.");
 }
 
 async function buildAssessment() {
-  renderAssessment();
-  await previewWorkbook();
+  const row = getFormData();
+  const resolved = await resolveAssessmentPayload(row, { preferAi: true });
+  renderAssessmentPayload(resolved.payload);
+  await previewWorkbook(resolved.payload, row);
   saveFieldHistory();
-  setStatus("Assessment built and workbook preview updated.");
+  setStatus(resolved.usedAi ? "Assessment built from AI JSON and workbook preview updated." : "Assessment built with local fallback and workbook preview updated.");
 }
 
 function clearAssessment() {
@@ -962,6 +954,74 @@ function assessRow(row) {
   };
 }
 
+function buildDeterministicAssessmentPayload(row) {
+  const assessment = assessRow(row);
+  const entries = buildHazardEntries(row, assessment);
+  const firstAid = summarizeFirstAid(assessment.hazardTags);
+  return {
+    assessment: {
+      ...assessment,
+      fireText: summarizeFirefighting(assessment.hazardTags),
+      spillPrecautions: summarizeSpillPrecautions(assessment.hazardTags, assessment.engineeringControls),
+      spillCleanup: summarizeSpillCleanup(assessment.hazardTags, assessment.wasteFlags),
+    },
+    entries,
+    firstAid,
+  };
+}
+
+async function resolveAssessmentPayload(row, options = {}) {
+  const signature = JSON.stringify(row);
+  if (!options.force && latestAssessmentPayload && latestAssessmentSignature === signature) {
+    return { payload: latestAssessmentPayload, usedAi: false, cached: true };
+  }
+  const fallbackPayload = buildDeterministicAssessmentPayload(row);
+  const settings = readAiSettings();
+  const aiAvailable = Boolean(options.preferAi && settings.apiKey?.trim() && settings.model?.trim() && settings.provider?.trim());
+  if (!aiAvailable) {
+    latestAssessmentPayload = fallbackPayload;
+    latestAssessmentSignature = signature;
+    return { payload: fallbackPayload, usedAi: false };
+  }
+
+  try {
+    const prompt = [
+      "Build a structured chemical risk assessment JSON from the provided data.",
+      "Always cover storage, use, and waste.",
+      "Use explicit hazard statement wording when available.",
+      "Return strict JSON with this schema only:",
+      "{",
+      '  "assessment": {',
+      '    "riskBand": string,',
+      '    "hazardTags": string[],',
+      '    "recommendedPpe": string[],',
+      '    "engineeringControls": string[],',
+      '    "storageFlags": string[],',
+      '    "wasteFlags": string[],',
+      '    "fireText": string,',
+      '    "spillPrecautions": string,',
+      '    "spillCleanup": string',
+      '  },',
+      '  "entries": [{"area": string, "hazard": string, "risk": string, "controls": string, "rating": string}],',
+      '  "firstAid": {"ingestion": string, "inhalation": string, "eyes": string, "skin": string}',
+      "}",
+      "",
+      `Form data:\n${JSON.stringify(row, null, 2)}`,
+      "",
+      `Deterministic fallback assessment:\n${JSON.stringify(fallbackPayload, null, 2)}`,
+    ].join("\n");
+    const rawResponse = await callAiReview(settings, prompt, ASSESSMENT_BUILD_SYSTEM_PROMPT);
+    const aiPayload = sanitizeAssessmentBuildPayload(parseAiJson(rawResponse), fallbackPayload);
+    latestAssessmentPayload = aiPayload;
+    latestAssessmentSignature = signature;
+    return { payload: aiPayload, usedAi: true };
+  } catch (_error) {
+    latestAssessmentPayload = fallbackPayload;
+    latestAssessmentSignature = signature;
+    return { payload: fallbackPayload, usedAi: false };
+  }
+}
+
 function buildHazardEntries(row, assessment) {
   const band = titleCase(assessment.riskBand);
   const tags = orderedUseTags(assessment.hazardTags);
@@ -1008,23 +1068,110 @@ function buildHazardEntries(row, assessment) {
   return entries.slice(0, 6);
 }
 
+function sanitizeAssessmentBuildPayload(reviewed, fallbackPayload) {
+  const safe = reviewed && typeof reviewed === "object" ? reviewed : {};
+  const fallbackAssessment = fallbackPayload.assessment || {};
+  const fallbackEntries = Array.isArray(fallbackPayload.entries) ? fallbackPayload.entries : [];
+  const fallbackFirstAid = fallbackPayload.firstAid || {};
+  const safeAssessment = safe.assessment && typeof safe.assessment === "object" ? safe.assessment : {};
+  const assessment = {
+    ...fallbackAssessment,
+    riskBand: normalizeRiskBand(safeAssessment.riskBand) || fallbackAssessment.riskBand,
+    hazardTags: normalizeStringArray(safeAssessment.hazardTags, fallbackAssessment.hazardTags),
+    recommendedPpe: normalizeStringArray(safeAssessment.recommendedPpe, fallbackAssessment.recommendedPpe),
+    engineeringControls: normalizeStringArray(safeAssessment.engineeringControls, fallbackAssessment.engineeringControls),
+    storageFlags: normalizeStringArray(safeAssessment.storageFlags, fallbackAssessment.storageFlags),
+    wasteFlags: normalizeStringArray(safeAssessment.wasteFlags, fallbackAssessment.wasteFlags),
+    fireText: normalizeFlatString(safeAssessment.fireText) || fallbackAssessment.fireText,
+    spillPrecautions: normalizeFlatString(safeAssessment.spillPrecautions) || fallbackAssessment.spillPrecautions,
+    spillCleanup: normalizeFlatString(safeAssessment.spillCleanup) || fallbackAssessment.spillCleanup,
+  };
+  const entries = ensureCoreAreaEntries(
+    Array.isArray(safe.entries) ? safe.entries.map((entry) => sanitizeEntry(entry)).filter(Boolean) : [],
+    fallbackEntries
+  ).slice(0, 6);
+  const firstAidSource = safe.firstAid && typeof safe.firstAid === "object" ? safe.firstAid : {};
+  const firstAid = {
+    ingestion: normalizeFlatString(firstAidSource.ingestion) || fallbackFirstAid.ingestion,
+    inhalation: normalizeFlatString(firstAidSource.inhalation) || fallbackFirstAid.inhalation,
+    eyes: normalizeFlatString(firstAidSource.eyes) || fallbackFirstAid.eyes,
+    skin: normalizeFlatString(firstAidSource.skin) || fallbackFirstAid.skin,
+  };
+  return { assessment, entries, firstAid };
+}
+
+function sanitizeEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  return {
+    area: normalizeFlatString(entry.area),
+    hazard: normalizeFlatString(entry.hazard),
+    risk: normalizeFlatString(entry.risk),
+    controls: normalizeFlatString(entry.controls),
+    rating: normalizeFlatString(entry.rating),
+  };
+}
+
+function ensureCoreAreaEntries(entries, fallbackEntries) {
+  const normalizedEntries = Array.isArray(entries) ? entries.filter((entry) => entry && (entry.area || entry.hazard || entry.risk || entry.controls || entry.rating)) : [];
+  const result = [...normalizedEntries];
+  for (const requiredArea of ["Storage", "Use", "Waste"]) {
+    if (!result.some((entry) => entry.area === requiredArea)) {
+      const fallback = fallbackEntries.find((entry) => entry.area === requiredArea);
+      if (fallback) result.push(fallback);
+    }
+  }
+  return result;
+}
+
+function normalizeStringArray(value, fallback) {
+  if (!Array.isArray(value)) return Array.isArray(fallback) ? fallback : [];
+  const next = value.map(normalizeFlatString).filter(Boolean);
+  return next.length ? next : (Array.isArray(fallback) ? fallback : []);
+}
+
+function normalizeRiskBand(value) {
+  const normalized = normalizeFlatString(value).toLowerCase();
+  return ["minimal", "low", "medium", "high", "critical"].includes(normalized) ? normalized : "";
+}
+
+function renderAssessmentPayload(payload) {
+  const assessment = payload.assessment || {};
+  const entries = Array.isArray(payload.entries) ? payload.entries : [];
+  const firstAid = payload.firstAid || {};
+  ui.riskRating.textContent = titleCase(assessment.riskBand || "-");
+  ui.hazardTags.textContent = assessment.hazardTags?.length ? assessment.hazardTags.map(pretty).join(", ") : "-";
+  ui.ppeSummary.textContent = normalizePpe(assessment.recommendedPpe || []).join(", ");
+  ui.hazardTableBody.innerHTML = entries.map((entry) => `
+    <tr>
+      <td>${escapeHtml(entry.area)}</td>
+      <td>${escapeHtml(entry.hazard)}</td>
+      <td>${escapeHtml(entry.risk)}</td>
+      <td>${escapeHtml(entry.controls).replace(/\n/g, "<br>")}</td>
+      <td>${escapeHtml(entry.rating)}</td>
+    </tr>
+  `).join("");
+  ui.fireText.textContent = assessment.fireText || "-";
+  ui.spillPrecautions.textContent = String(assessment.spillPrecautions || "-").replace(/\n/g, " ");
+  ui.spillCleanup.textContent = String(assessment.spillCleanup || "-").replace(/\n/g, " ");
+  ui.firstAidList.innerHTML = Object.values(firstAid).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  updateManualRiskUi(assessment.manualRisk || assessManualRisk(getFormData()));
+}
+
 async function downloadWorkbook() {
   const row = getFormData();
-  const assessment = assessRow(row);
-  const entries = buildHazardEntries(row, assessment);
-  const firstAid = summarizeFirstAid(assessment.hazardTags);
+  const resolved = await resolveAssessmentPayload(row, { preferAi: true });
+  const { assessment, entries, firstAid } = resolved.payload;
   const wb = await buildWorkbook(row, assessment, entries, firstAid);
   const baseName = slugify(row.name || "chemical");
   return saveWorkbookFile(wb, `${baseName}.xlsx`, row.name || "chemical");
 }
 
-async function previewWorkbook() {
-  const row = getFormData();
-  const assessment = assessRow(row);
-  const entries = buildHazardEntries(row, assessment);
-  const firstAid = summarizeFirstAid(assessment.hazardTags);
-  const wb = await buildWorkbook(row, assessment, entries, firstAid);
-  renderWorkbookPreview(wb, row.name || "chemical");
+async function previewWorkbook(payload = null, row = null) {
+  const effectiveRow = row || getFormData();
+  const effectivePayload = payload || buildDeterministicAssessmentPayload(effectiveRow);
+  const { assessment, entries, firstAid } = effectivePayload;
+  const wb = await buildWorkbook(effectiveRow, assessment, entries, firstAid);
+  renderWorkbookPreview(wb, effectiveRow.name || "chemical");
   setStatus("Workbook preview updated.");
 }
 
