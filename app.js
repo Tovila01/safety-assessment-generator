@@ -252,6 +252,7 @@ form.assessor.addEventListener("change", persistHistoryField);
 form.assessor.addEventListener("blur", persistHistoryField);
 form.location.addEventListener("change", persistHistoryField);
 form.location.addEventListener("blur", persistHistoryField);
+form.name.addEventListener("input", handleManualNameEdit);
 form.pdfExtractionMode.addEventListener("change", persistExtractionMode);
 form.manualRiskEnabled.addEventListener("change", renderAssessment);
 form.manualSeverity.addEventListener("change", renderAssessment);
@@ -786,6 +787,10 @@ function applyExtracted(extracted) {
     else if (key === "notes") form.notes.value = value || form.notes.value;
     else if (form[key]) form[key].value = value || form[key].value;
   }
+}
+
+function handleManualNameEdit() {
+  extractedNameDetails = "";
 }
 
 function renderAssessment() {
