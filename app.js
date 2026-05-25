@@ -529,7 +529,7 @@ async function reviewAssessment() {
   setReviewStatus("AI is reviewing the assessment...");
   try {
     const rawResponse = await callAiReview(settings, prompt, ASSESSMENT_REVIEW_SYSTEM_PROMPT);
-    latestAssessmentReview = sanitizeAssessmentReview(parseAiJson(rawResponse));
+    latestAssessmentReview = sanitizeAssessmentReview(parseAiJson(rawResponse), workbookReviewData);
     renderAssessmentReview(latestAssessmentReview);
     setReviewStatus(latestAssessmentReview.looksGood ? "AI review complete. No changes suggested." : "AI review complete. Suggestions are ready.");
     setStatus(latestAssessmentReview.looksGood ? "Assessment review complete. No changes suggested." : "Assessment review complete. Suggestions are ready to apply.");
@@ -541,10 +541,10 @@ async function reviewAssessment() {
   }
 }
 
-function sanitizeAssessmentReview(reviewed) {
+function sanitizeAssessmentReview(reviewed, workbookReviewData = null) {
   const safe = reviewed && typeof reviewed === "object" ? reviewed : {};
   const allowedFields = new Set(["name", "cas", "ghsCodes", "physicalForm", "concentration", "assessor", "location", "date", "peopleCount", "supervisor", "notes", "nameDetails"]);
-  const suggestions = Array.isArray(safe.suggestions) ? safe.suggestions
+  let suggestions = Array.isArray(safe.suggestions) ? safe.suggestions
     .filter((item) => item && typeof item === "object" && allowedFields.has(String(item.field || "")))
     .map((item) => ({
       field: String(item.field),
@@ -552,10 +552,20 @@ function sanitizeAssessmentReview(reviewed) {
       reason: normalizeFlatString(item.reason),
     }))
     .filter((item) => item.value || item.reason) : [];
+  let warnings = Array.isArray(safe.warnings) ? safe.warnings.map(normalizeFlatString).filter(Boolean) : [];
+  let summary = normalizeFlatString(safe.summary || "");
+  if (workbookHasGhsData(workbookReviewData)) {
+    suggestions = suggestions.filter((item) => !(item.field === "ghsCodes" && reviewTextImpliesMissingGhs(`${item.value} ${item.reason}`)));
+    warnings = warnings.filter((item) => !reviewTextImpliesMissingGhs(item));
+    summary = stripMissingGhsSentences(summary);
+  }
+  const looksGood = suggestions.length === 0 && warnings.length === 0
+    ? (Boolean(safe.looksGood) || !summary)
+    : false;
   return {
-    looksGood: Boolean(safe.looksGood) && suggestions.length === 0,
-    summary: normalizeFlatString(safe.summary || ""),
-    warnings: Array.isArray(safe.warnings) ? safe.warnings.map(normalizeFlatString).filter(Boolean) : [],
+    looksGood,
+    summary,
+    warnings,
     suggestions,
   };
 }
@@ -666,6 +676,36 @@ function compareCellAddresses(left, right) {
   const rightCell = XLSX.utils.decode_cell(right);
   if (leftCell.r !== rightCell.r) return leftCell.r - rightCell.r;
   return leftCell.c - rightCell.c;
+}
+
+function workbookHasGhsData(workbookReviewData) {
+  const keyCells = workbookReviewData?.keyCells || {};
+  const values = [
+    keyCells.C40,
+    ...Object.values(keyCells),
+    ...(workbookReviewData?.filledCells || []).map((item) => item?.value || ""),
+  ]
+    .map((value) => normalizeFlatString(value))
+    .filter(Boolean);
+  return values.some((value) => /\bGHS\s*:|\bH\d{3}\b|\bEUH\d+\b/i.test(value));
+}
+
+function reviewTextImpliesMissingGhs(text) {
+  const normalized = normalizeFlatString(text).toLowerCase();
+  if (!normalized) return false;
+  const mentionsGhs = /\bghs\b|\bh-?codes?\b|hazard statements?|nomenclature/.test(normalized);
+  const saysMissing = /\bmissing\b|\bnot present\b|\bnot included\b|\babsent\b|\bno\b|\black(?:ing)?\b/.test(normalized);
+  return mentionsGhs && saysMissing;
+}
+
+function stripMissingGhsSentences(text) {
+  if (!text) return "";
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => normalizeFlatString(item))
+    .filter(Boolean)
+    .filter((item) => !reviewTextImpliesMissingGhs(item));
+  return sentences.join(" ");
 }
 
 function parseSdsText(text) {
