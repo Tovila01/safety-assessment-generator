@@ -968,7 +968,7 @@ function buildHazardEntries(row, assessment) {
   const entries = [];
   const primaryTag = tags[0] || "";
   const primaryTemplate = HAZARD_LIBRARY[primaryTag] || null;
-  const defaultUseRisk = buildRiskTextFromCodes(assessment.codes, 3) || primaryRiskText(tags) || "Hazardous chemical exposure.";
+  const defaultUseRisk = buildRiskTextFromCodes(assessment.codes, assessment.codes.length) || primaryRiskText(tags) || "Hazardous chemical exposure.";
   const defaultUseControls = buildGenericUseControls(tags, assessment.engineeringControls);
 
   entries.push({
@@ -982,7 +982,7 @@ function buildHazardEntries(row, assessment) {
   entries.push({
     area: "Use",
     hazard: primaryTemplate?.hazard || "Handling exposure",
-    risk: primaryTemplate?.risk || defaultUseRisk,
+    risk: buildRiskTextFromCodes(assessment.codes, assessment.codes.length) || buildRiskTextForTag(primaryTag, assessment.codes) || primaryTemplate?.risk || defaultUseRisk,
     controls: primaryTemplate?.controls?.join("\n") || defaultUseControls,
     rating: band,
   });
