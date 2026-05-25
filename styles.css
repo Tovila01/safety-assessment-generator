@@ -236,6 +236,17 @@ select {
   margin-bottom: 12px;
 }
 
+.review-status {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.review-status.running {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
 .review-panel {
   margin-bottom: 18px;
   padding: 16px;

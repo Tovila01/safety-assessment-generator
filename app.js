@@ -179,7 +179,9 @@ const ui = {
   workbookPreviewMeta: document.querySelector("#workbookPreviewMeta"),
   manualHazardDisplay: document.querySelector("#manualHazardDisplay"),
   manualRiskSummary: document.querySelector("#manualRiskSummary"),
+  reviewStatus: document.querySelector("#reviewStatus"),
   reviewSuggestions: document.querySelector("#reviewSuggestions"),
+  reviewAssessmentButton: document.querySelector("#reviewAssessmentButton"),
   applyReviewButton: document.querySelector("#applyReviewButton"),
 };
 
@@ -190,7 +192,7 @@ document.querySelector("#extractPdfButton").addEventListener("click", () => runS
 document.querySelector("#buildButton").addEventListener("click", () => runSafely(buildAssessment));
 document.querySelector("#previewWorkbookButton").addEventListener("click", () => runSafely(previewWorkbook));
 document.querySelector("#downloadButton").addEventListener("click", () => runSafely(downloadWorkbook));
-document.querySelector("#reviewAssessmentButton").addEventListener("click", () => runSafely(reviewAssessment));
+ui.reviewAssessmentButton.addEventListener("click", () => runSafely(reviewAssessment));
 ui.applyReviewButton.addEventListener("click", () => runSafely(applyReviewSuggestions));
 aiSettingsForm.saveButton.addEventListener("click", saveAiSettings);
 aiSettingsForm.resetButton.addEventListener("click", resetAiSettings);
@@ -482,6 +484,7 @@ function buildAiReviewStatus(reviewed) {
 async function reviewAssessment() {
   const settings = readAiSettings();
   if (!settings.apiKey?.trim() || !settings.model?.trim() || !settings.provider?.trim()) {
+    setReviewStatus("AI review unavailable. Set provider, model, and API key first.");
     setStatus("AI review is unavailable until provider, model, and API key are set.");
     return;
   }
@@ -514,10 +517,20 @@ async function reviewAssessment() {
   ].join("\n");
 
   setStatus("Reviewing assessment with AI...");
-  const rawResponse = await callAiReview(settings, prompt, ASSESSMENT_REVIEW_SYSTEM_PROMPT);
-  latestAssessmentReview = sanitizeAssessmentReview(parseAiJson(rawResponse));
-  renderAssessmentReview(latestAssessmentReview);
-  setStatus(latestAssessmentReview.looksGood ? "Assessment review complete. No changes suggested." : "Assessment review complete. Suggestions are ready to apply.");
+  setReviewRunningState(true);
+  setReviewStatus("AI is reviewing the assessment...");
+  try {
+    const rawResponse = await callAiReview(settings, prompt, ASSESSMENT_REVIEW_SYSTEM_PROMPT);
+    latestAssessmentReview = sanitizeAssessmentReview(parseAiJson(rawResponse));
+    renderAssessmentReview(latestAssessmentReview);
+    setReviewStatus(latestAssessmentReview.looksGood ? "AI review complete. No changes suggested." : "AI review complete. Suggestions are ready.");
+    setStatus(latestAssessmentReview.looksGood ? "Assessment review complete. No changes suggested." : "Assessment review complete. Suggestions are ready to apply.");
+  } catch (error) {
+    setReviewStatus(`AI review failed: ${error?.message || String(error)}`);
+    throw error;
+  } finally {
+    setReviewRunningState(false);
+  }
 }
 
 function sanitizeAssessmentReview(reviewed) {
@@ -582,6 +595,16 @@ function applyReviewSuggestions() {
   renderAssessment();
   previewWorkbook();
   setStatus("Applied AI review suggestions.");
+}
+
+function setReviewStatus(message) {
+  ui.reviewStatus.textContent = message;
+}
+
+function setReviewRunningState(isRunning) {
+  ui.reviewStatus.classList.toggle("running", Boolean(isRunning));
+  ui.reviewAssessmentButton.disabled = Boolean(isRunning);
+  ui.reviewAssessmentButton.textContent = isRunning ? "Reviewing..." : "Review Assessment";
 }
 
 function parseSdsText(text) {
