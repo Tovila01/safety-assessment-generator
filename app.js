@@ -242,11 +242,15 @@ let extractedNameDetails = "";
 let latestAssessmentReview = null;
 let latestAssessmentPayload = null;
 let latestAssessmentSignature = "";
+let latestSourceDocumentText = "";
 let workbookTemplateBuffer = null;
 const ASSESSMENT_REVIEW_SYSTEM_PROMPT = [
-  "You review completed chemical safety assessments and suggest final corrections.",
-  "Your job is not to rewrite everything. Only suggest targeted last-mile fixes if something looks wrong, inconsistent, misspelled, incomplete, or unsupported.",
-  "Use the assessment data and hazard summary provided. Be conservative and concise.",
+  "You review completed chemical safety assessments against the chemical safety information provided from the source document.",
+  "Judge whether the finished assessment is materially aligned with the safety profile of the chemical.",
+  "Focus on whether the generated assessment omits, understates, overstates, or distorts relevant safety information from the source.",
+  "Do not anchor your review to the intermediate form fields unless they help identify a source-supported correction.",
+  "Your job is not to rewrite everything. Only suggest targeted last-mile fixes if something looks wrong, inconsistent, incomplete, or unsupported.",
+  "Use the source safety information and the generated workbook as the primary evidence.",
   "Do not invent new hazard codes or unsupported facts.",
   "If the assessment already looks acceptable, return no changes.",
   "Return valid JSON only.",
@@ -368,6 +372,7 @@ async function extractFromPdf() {
     const content = await page.getTextContent();
     text += content.items.map((item) => item.str).join(" ") + "\n";
   }
+  latestSourceDocumentText = text;
   const fallbackExtraction = parseSdsText(text);
   const extractionMode = getSelectedExtractionMode();
   let finalExtraction = fallbackExtraction;
@@ -624,9 +629,10 @@ async function reviewAssessment() {
   const workbook = await buildWorkbook(row, assessment, entries, firstAid);
   const workbookReviewData = serializeWorkbookForReview(workbook);
   const prompt = [
-    "Review this completed chemical safety assessment.",
-    "Check whether the extracted fields, wording, resulting assessment, and generated workbook content look right.",
-    "Base your reasoning on the workbook output, not only on the intermediate assessment summary.",
+    "Review this completed chemical safety assessment against the chemical safety information from the source document.",
+    "Your main question is whether the created assessment is appropriate for this particular chemical.",
+    "Base your reasoning on the source safety information and the generated workbook output, not on simple agreement with the intermediate input fields.",
+    "Flag missing, understated, overstated, vague, or unsupported safety content in the finished assessment.",
     "Do not report GHS nomenclature as missing if GHS / H-codes are present anywhere in the workbook, including combined summary fields such as the bottom 'Other Information' section.",
     "In this workbook, GHS information may appear bundled together with CAS and name details instead of in a separate dedicated GHS row.",
     "Suggest only final targeted changes that should be applied.",
@@ -638,7 +644,9 @@ async function reviewAssessment() {
     '  "suggestions": [{"field": string, "value": string, "reason": string}]',
     "}",
     "",
-    `Form data:\n${JSON.stringify(row, null, 2)}`,
+    `Source safety information:\n${latestSourceDocumentText || "No source document text available in this session."}`,
+    "",
+    `Intermediate form data (secondary context only):\n${JSON.stringify(row, null, 2)}`,
     "",
     `Assessment summary:\n${JSON.stringify({
       riskBand: assessment.riskBand,
@@ -906,6 +914,7 @@ function clearAssessment() {
   form.manualSeverity.value = "medium";
   form.manualProbability.value = "likely";
   extractedNameDetails = "";
+  latestSourceDocumentText = "";
   latestAssessmentReview = null;
   renderAssessmentReview(null);
   setReviewStatus("AI review idle.");
