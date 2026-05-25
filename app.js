@@ -190,6 +190,7 @@ let saveDirectoryHandle = null;
 document.querySelector("#chooseFolderButton").addEventListener("click", () => runSafely(chooseSaveFolder));
 document.querySelector("#extractPdfButton").addEventListener("click", () => runSafely(extractFromPdf));
 document.querySelector("#buildButton").addEventListener("click", () => runSafely(buildAssessment));
+document.querySelector("#clearAssessmentButton").addEventListener("click", () => runSafely(clearAssessment));
 document.querySelector("#downloadButton").addEventListener("click", () => runSafely(downloadWorkbook));
 ui.reviewAssessmentButton.addEventListener("click", () => runSafely(reviewAssessment));
 ui.applyReviewButton.addEventListener("click", () => runSafely(applyReviewSuggestions));
@@ -733,6 +734,35 @@ async function buildAssessment() {
   await previewWorkbook();
   saveFieldHistory();
   setStatus("Assessment built and workbook preview updated.");
+}
+
+function clearAssessment() {
+  form.pdfFile.value = "";
+  form.name.value = "";
+  form.cas.value = "";
+  form.ghsCodes.value = "";
+  form.physicalForm.value = "";
+  form.concentration.value = "";
+  form.assessor.value = "";
+  form.location.value = "";
+  form.date.value = new Date().toLocaleDateString("en-GB").replace(/\//g, "/");
+  form.peopleCount.value = "";
+  form.supervisor.value = "";
+  form.notes.value = "";
+  form.manualRiskEnabled.checked = false;
+  form.manualHazardScore.value = "2";
+  form.manualSeverity.value = "medium";
+  form.manualProbability.value = "likely";
+  extractedNameDetails = "";
+  latestAssessmentReview = null;
+  renderAssessmentReview(null);
+  setReviewStatus("AI review idle.");
+  setReviewRunningState(false);
+  ui.workbookPreview.classList.add("empty");
+  ui.workbookPreview.innerHTML = "Generate or preview the XLSX to inspect the form in the browser.";
+  ui.workbookPreviewMeta.textContent = "No workbook generated yet.";
+  renderAssessment();
+  setStatus("Assessment cleared.");
 }
 
 function getFormData() {
